@@ -116,7 +116,7 @@ with tab_ventas:
         with col_btn2:
             st.markdown("##### 📥 Importar desde WhatsApp")
             with st.form("form_whatsapp"):
-                texto_wpp = st.text_area("Pega el mensaje de WhatsApp aquí", placeholder="Ej: Juan Perez 12, 45, 100 ref 123456")
+                texto_wpp = st.text_area("Pega el mensaje de WhatsApp aquí", placeholder="Ej: 58 412 1234567 / Maria Perez: Hola quiero el 12, 15 y ref 123456")
                 btn_wpp = st.form_submit_button("Procesar y Registrar")
                 
                 if btn_wpp:
@@ -130,21 +130,43 @@ with tab_ventas:
                         ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp)
                         ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
                         
-                        # Extracción inteligente del nombre: limpiar los números encontrados y palabras de control
-                        nombre_limpio = texto_wpp
-                        # Remover los números de cartones y la referencia del texto para que quede el nombre
-                        for n in nums_wpp + ([ref_wpp] if ref_wpp else []):
-                            nombre_limpio = nombre_limpio.replace(n, "")
+                        # Limpieza profunda del texto copiado de WhatsApp
+                        lineas = texto_wpp.split('\n')
+                        nombre_encontrado = ""
                         
-                        # Limpiar símbolos molestos y dejar solo letras y espacios
-                        nombre_limpio = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', '', nombre_limpio)
-                        # Quitar palabras comunes de relleno en chats
-                        for palabra in ["ref", "pago", "carton", "cartones", "hola", "por", "favor", "quiero", "soy"]:
-                            nombre_limpio = re.sub(rf'\b{palabra}\b', '', nombre_limpio, flags=re.IGNORECASE)
-                        
-                        nombre_limpio = " ".join(nombre_limpio.split()).strip()
-                        if not nombre_limpio or len(nombre_limpio) < 2:
-                            nombre_limpio = "Cliente WhatsApp"
+                        for linea in lineas:
+                            linea_limpia = linea.strip()
+                            # Ignorar líneas que parecen horas (ej: [12:34], 12:34 PM) o números telefónicos largos aislados
+                            if re.match(r'^[\d\+\-\s\(\)\:\/\[\]]+$', linea_limpia) and len(linea_limpia) < 20:
+                                continue
+                            if ":" in linea_limpia and len(linea_limpia.split(":")[0]) < 25:
+                                posibles_nombres = linea_limpia.split(":")
+                                candidato = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', '', posibles_nombres[0]).strip()
+                                if len(candidato) > 2:
+                                    nombre_encontrado = candidato
+                                    break
+                            
+                            # Buscar texto que tenga letras y no sea solo números de cartones o referencias
+                            candidato_texto = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', '', linea_limpia).strip()
+                            for palabra in ["ref", "pago", "carton", "cartones", "hola", "por", "favor", "quiero", "soy", "y"]:
+                                candidato_texto = re.sub(rf'\b{palabra}\b', '', candidato_texto, flags=re.IGNORECASE)
+                            candidato_texto = " ".join(candidato_texto.split())
+                            if len(candidato_texto) > 2:
+                                nombre_encontrado = candidato_texto
+                                break
+
+                        if not nombre_encontrado:
+                            # Intento general sacando todo el texto que no sean números
+                            texto_sin_nums = texto_wpp
+                            for n in nums_wpp + ([ref_wpp] if ref_wpp else []):
+                                texto_sin_nums = texto_sin_nums.replace(n, "")
+                            nombre_limpio = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', '', texto_sin_nums)
+                            for palabra in ["ref", "pago", "carton", "cartones", "hola", "por", "favor", "quiero", "soy", "y", "pm", "am"]:
+                                nombre_limpio = re.sub(rf'\b{palabra}\b', '', nombre_limpio, flags=re.IGNORECASE)
+                            nombre_encontrado = " ".join(nombre_limpio.split()).strip()
+
+                        if not nombre_encontrado or len(nombre_encontrado) < 2:
+                            nombre_encontrado = "Cliente WhatsApp"
                         
                         if not nums_wpp:
                             st.error("No se detectaron cartones válidos (1-630) en el mensaje.")
@@ -153,10 +175,10 @@ with tab_ventas:
                             conn = sqlite3.connect(DB_NAME)
                             c = conn.cursor()
                             c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_limpio, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
+                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_encontrado, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
                             conn.commit()
                             conn.close()
-                            st.success(f"¡Registrado! Cliente: {nombre_limpio} | Cartones: {len(nums_wpp)}")
+                            st.success(f"¡Registrado! Cliente: {nombre_encontrado} | Cartones: {len(nums_wpp)}")
                             st.rerun()
 
         with col_btn3:
