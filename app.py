@@ -116,47 +116,42 @@ with tab_ventas:
         with col_btn2:
             st.markdown("##### 📥 Importar desde WhatsApp")
             with st.form("form_whatsapp"):
-                texto_wpp = st.text_area("Pega el mensaje de WhatsApp aquí", placeholder="Ej:\n+58 412 1234567\nHola quiero el 12, 15 y ref 123456")
+                texto_wpp = st.text_area("Pega el mensaje de WhatsApp aquí", placeholder="Ej:\nMaria Perez\n12, 45, 100 ref 123456")
                 btn_wpp = st.form_submit_button("Procesar y Registrar")
                 
                 if btn_wpp:
                     if not texto_wpp.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
+                        # Separar por líneas
                         lineas = [l.strip() for l in texto_wpp.split('\n') if l.strip()]
-                        nombre_encontrado = ""
-                        cuerpo_mensaje = texto_wpp
+                        
+                        nombre_cliente = ""
+                        cuerpo_texto = texto_wpp
 
-                        if len(lineas) > 1:
-                            # La primera línea es la cabecera del contacto (Nombre o Número de teléfono)
-                            nombre_encontrado = lineas[0]
-                            cuerpo_mensaje = " ".join(lineas[1:])
+                        if len(lineas) >= 2:
+                            # 1ra Línea: Se asigna directamente como el nombre del contacto o número telefónico de WhatsApp
+                            nombre_cliente = lineas[0]
+                            # El resto de líneas se usa para buscar cartones y referencias
+                            cuerpo_texto = " ".join(lineas[1:])
                         else:
-                            cuerpo_mensaje = texto_wpp
+                            # Si se pegó en una sola línea, se toma una porción o se asume genérico
+                            nombre_cliente = "Cliente WhatsApp"
 
-                        # Limpiar marcas de hora de la cabecera si las trae el portapapeles
-                        nombre_encontrado = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', nombre_encontrado).strip()
-                        nombre_encontrado = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', nombre_encontrado, flags=re.IGNORECASE).strip()
+                        # Limpiar símbolos molestos o marcas de hora de la línea del nombre si los trae
+                        nombre_cliente = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', nombre_cliente).strip()
+                        nombre_cliente = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', nombre_cliente, flags=re.IGNORECASE).strip()
+
+                        if not nombre_cliente:
+                            nombre_cliente = "Cliente WhatsApp"
 
                         # Extraer cartones válidos (1 a 630) del cuerpo del mensaje
-                        nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_mensaje) if 1 <= int(n) <= 630]
+                        nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_texto) if 1 <= int(n) <= 630]
                         
-                        # Buscar referencia de pago móvil (6 dígitos)
-                        ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp)
+                        # Buscar referencia de pago móvil (6 dígitos exactos)
+                        ref_wpp_match = re.search(r"\b\d{6}\b", cuerpo_texto)
                         ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
-                        if len(lineas) <= 1:
-                            # Si se pegó en una sola línea, se limpian los números de cartón y referencia para dejar el resto como nombre
-                            texto_limpieza = texto_wpp
-                            for n in nums_wpp + ([ref_wpp] if ref_wpp else []):
-                                texto_limpieza = texto_limpieza.replace(n, "")
-                            for palabra in ["ref", "pago", "carton", "cartones", "hola", "por", "favor", "quiero", "soy"]:
-                                texto_limpieza = re.sub(rf'\b{palabra}\b', '', texto_limpieza, flags=re.IGNORECASE)
-                            nombre_encontrado = " ".join(texto_limpieza.split()).strip()
-
-                        if not nombre_encontrado or len(nombre_encontrado) < 2:
-                            nombre_encontrado = "Cliente WhatsApp"
-                        
                         if not nums_wpp:
                             st.error("No se detectaron cartones válidos (1-630) en el mensaje.")
                         else:
@@ -164,10 +159,10 @@ with tab_ventas:
                             conn = sqlite3.connect(DB_NAME)
                             c = conn.cursor()
                             c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_encontrado, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
+                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
                             conn.commit()
                             conn.close()
-                            st.success(f"¡Registrado! Cliente: {nombre_encontrado} | Cartones: {len(nums_wpp)}")
+                            st.success(f"¡Registrado! Cliente: {nombre_cliente} | Cartones: {len(nums_wpp)}")
                             st.rerun()
 
         with col_btn3:
@@ -234,9 +229,7 @@ with tab_ventas:
                         nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
                         
                         if st.form_submit_button("Guardar"):
-                            if any(char.isdigit() for char in nuevo_cliente):
-                                st.error("El nombre no debe llevar números.")
-                            elif re.search(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ]', nuevos_nums):
+                            if re.search(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ]', nuevos_nums):
                                 st.error("Los cartones solo llevan números.")
                             else:
                                 nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
