@@ -116,54 +116,43 @@ with tab_ventas:
         with col_btn2:
             st.markdown("##### 📥 Importar desde WhatsApp")
             with st.form("form_whatsapp"):
-                texto_wpp = st.text_area("Pega el mensaje de WhatsApp aquí", placeholder="Ej: 58 412 1234567 / Maria Perez: Hola quiero el 12, 15 y ref 123456")
+                texto_wpp = st.text_area("Pega el mensaje de WhatsApp aquí", placeholder="Ej:\n+58 412 1234567\nHola quiero el 12, 15 y ref 123456")
                 btn_wpp = st.form_submit_button("Procesar y Registrar")
                 
                 if btn_wpp:
                     if not texto_wpp.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # Extraer cartones válidos (1 a 630)
-                        nums_wpp = [n for n in re.findall(r"\b\d+\b", texto_wpp) if 1 <= int(n) <= 630]
+                        lineas = [l.strip() for l in texto_wpp.split('\n') if l.strip()]
+                        nombre_encontrado = ""
+                        cuerpo_mensaje = texto_wpp
+
+                        if len(lineas) > 1:
+                            # La primera línea es la cabecera del contacto (Nombre o Número de teléfono)
+                            nombre_encontrado = lineas[0]
+                            cuerpo_mensaje = " ".join(lineas[1:])
+                        else:
+                            cuerpo_mensaje = texto_wpp
+
+                        # Limpiar marcas de hora de la cabecera si las trae el portapapeles
+                        nombre_encontrado = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', nombre_encontrado).strip()
+                        nombre_encontrado = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', nombre_encontrado, flags=re.IGNORECASE).strip()
+
+                        # Extraer cartones válidos (1 a 630) del cuerpo del mensaje
+                        nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_mensaje) if 1 <= int(n) <= 630]
                         
                         # Buscar referencia de pago móvil (6 dígitos)
                         ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp)
                         ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
-                        
-                        # Limpieza profunda del texto copiado de WhatsApp
-                        lineas = texto_wpp.split('\n')
-                        nombre_encontrado = ""
-                        
-                        for linea in lineas:
-                            linea_limpia = linea.strip()
-                            # Ignorar líneas que parecen horas (ej: [12:34], 12:34 PM) o números telefónicos largos aislados
-                            if re.match(r'^[\d\+\-\s\(\)\:\/\[\]]+$', linea_limpia) and len(linea_limpia) < 20:
-                                continue
-                            if ":" in linea_limpia and len(linea_limpia.split(":")[0]) < 25:
-                                posibles_nombres = linea_limpia.split(":")
-                                candidato = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', '', posibles_nombres[0]).strip()
-                                if len(candidato) > 2:
-                                    nombre_encontrado = candidato
-                                    break
-                            
-                            # Buscar texto que tenga letras y no sea solo números de cartones o referencias
-                            candidato_texto = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', '', linea_limpia).strip()
-                            for palabra in ["ref", "pago", "carton", "cartones", "hola", "por", "favor", "quiero", "soy", "y"]:
-                                candidato_texto = re.sub(rf'\b{palabra}\b', '', candidato_texto, flags=re.IGNORECASE)
-                            candidato_texto = " ".join(candidato_texto.split())
-                            if len(candidato_texto) > 2:
-                                nombre_encontrado = candidato_texto
-                                break
 
-                        if not nombre_encontrado:
-                            # Intento general sacando todo el texto que no sean números
-                            texto_sin_nums = texto_wpp
+                        if len(lineas) <= 1:
+                            # Si se pegó en una sola línea, se limpian los números de cartón y referencia para dejar el resto como nombre
+                            texto_limpieza = texto_wpp
                             for n in nums_wpp + ([ref_wpp] if ref_wpp else []):
-                                texto_sin_nums = texto_sin_nums.replace(n, "")
-                            nombre_limpio = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', '', texto_sin_nums)
-                            for palabra in ["ref", "pago", "carton", "cartones", "hola", "por", "favor", "quiero", "soy", "y", "pm", "am"]:
-                                nombre_limpio = re.sub(rf'\b{palabra}\b', '', nombre_limpio, flags=re.IGNORECASE)
-                            nombre_encontrado = " ".join(nombre_limpio.split()).strip()
+                                texto_limpieza = texto_limpieza.replace(n, "")
+                            for palabra in ["ref", "pago", "carton", "cartones", "hola", "por", "favor", "quiero", "soy"]:
+                                texto_limpieza = re.sub(rf'\b{palabra}\b', '', texto_limpieza, flags=re.IGNORECASE)
+                            nombre_encontrado = " ".join(texto_limpieza.split()).strip()
 
                         if not nombre_encontrado or len(nombre_encontrado) < 2:
                             nombre_encontrado = "Cliente WhatsApp"
