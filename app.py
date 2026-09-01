@@ -111,42 +111,59 @@ with tab_ventas:
                         st.rerun()
 
         with col_btn2:
-            st.markdown("##### 📥 Importar desde WhatsApp (Con Separador)")
+            st.markdown("##### 📥 Importar Inteligente desde WhatsApp")
             with st.form("form_whatsapp"):
-                wpp_contacto = st.text_input("1. Pega aquí el Nombre o Número de Contacto de WhatsApp", placeholder="Ej: Maria Perez o +58 412...")
-                wpp_mensaje = st.text_area("2. Pega aquí el mensaje con los cartones y ref", placeholder="Ej: Hola quiero el 12, 45 y ref 123456")
+                texto_wpp_unificado = st.text_area("Pega todo lo resaltado de WhatsApp aquí", placeholder="Pega aquí el contacto y el mensaje completo juntos. La app separará el nombre y los cartones...")
                 btn_wpp = st.form_submit_button("Procesar y Registrar")
                 
                 if btn_wpp:
-                    nombre_limpio = wpp_contacto.strip()
-                    # Limpiar por si acaso trae marcas de hora de la interfaz de WhatsApp
-                    nombre_limpio = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', nombre_limpio).strip()
-                    nombre_limpio = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', nombre_limpio, flags=re.IGNORECASE).strip()
-                    
-                    if not nombre_limpio:
-                        nombre_limpio = "Cliente WhatsApp"
-                        
-                    if not wpp_mensaje.strip():
-                        st.warning("El campo de mensaje/cartones está vacío.")
+                    if not texto_wpp_unificado.strip():
+                        st.warning("El campo de texto está vacío.")
                     else:
-                        # Extraer cartones válidos (1 a 630)
-                        nums_wpp = [n for n in re.findall(r"\b\d+\b", wpp_mensaje) if 1 <= int(n) <= 630]
+                        # Limpiar y separar líneas ignorando líneas vacías
+                        lineas = [l.strip() for l in texto_wpp_unificado.split('\n') if l.strip()]
+                        
+                        nombre_cliente = "Cliente WhatsApp"
+                        texto_analisis = texto_wpp_unificado
+
+                        if len(lineas) > 0:
+                            # Tomamos la primera línea como candidata principal para el nombre del contacto
+                            primera_linea = lineas[0]
+                            
+                            # Limpieza profunda de marcas comunes de hora o interfaz copiada de WhatsApp
+                            primera_linea = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', primera_linea).strip()
+                            primera_linea = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', primera_linea, flags=re.IGNORECASE).strip()
+                            
+                            # Si la primera línea tiene texto real que no sea exclusivamente números de cartón puros, lo asumimos como nombre
+                            if primera_linea and not re.fullmatch(r'\d+', primera_linea):
+                                nombre_cliente = primera_linea
+                                # El cuerpo para buscar cartones será el resto de líneas
+                                texto_analisis = " ".join(lineas[1:]) if len(lineas) > 1 else primera_linea
+                            elif len(lineas) > 1:
+                                # Si la primera línea era un número puro, buscamos si la segunda tiene nombre
+                                segunda_linea = lineas[1]
+                                if segunda_linea and not re.fullmatch(r'\d+', segunda_linea):
+                                    nombre_cliente = segunda_linea
+                                    texto_analisis = " ".join(lineas[2:]) if len(lineas) > 2 else " ".join(lineas)
+
+                        # Extraer estrictamente cartones válidos (1 a 630) de todo el texto analizado
+                        nums_wpp = [n for n in re.findall(r"\b\d+\b", texto_analisis) if 1 <= int(n) <= 630]
                         
                         # Buscar referencia de pago móvil (6 dígitos exactos)
-                        ref_wpp_match = re.search(r"\b\d{6}\b", wpp_mensaje)
+                        ref_wpp_match = re.search(r"\b\d{6}\b", texto_analisis)
                         ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
                         if not nums_wpp:
-                            st.error("No se detectaron cartones válidos (1-630) en el mensaje.")
+                            st.error("No se detectaron cartones válidos (1-630) en el texto copiado.")
                         else:
                             estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                             conn = sqlite3.connect(DB_NAME)
                             c = conn.cursor()
                             c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_limpio, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
+                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
                             conn.commit()
                             conn.close()
-                            st.success(f"¡Registrado! Cliente: {nombre_limpio} | Cartones: {len(nums_wpp)}")
+                            st.success(f"¡Registrado! Cliente: {nombre_cliente} | Cartones: {len(nums_wpp)}")
                             st.rerun()
 
         with col_btn3:
