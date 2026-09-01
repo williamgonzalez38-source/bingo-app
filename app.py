@@ -114,8 +114,8 @@ with tab_ventas:
             st.markdown("##### 📥 Importar Directo desde WhatsApp")
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
-                    "Pega aquí el contacto y el mensaje juntos", 
-                    placeholder="Pega todo (Ej: Nombre del contacto arriba y números/mensaje abajo)..."
+                    "Pega aquí todo lo resaltado en WhatsApp", 
+                    placeholder="Pega aquí (Nombre de WhatsApp arriba + mensaje de números abajo)..."
                 )
                 btn_wpp = st.form_submit_button("Procesar y Registrar")
                 
@@ -123,31 +123,37 @@ with tab_ventas:
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # Dividir todo el bloque copiado en líneas individuales
-                        lineas = [l.strip() for l in texto_wpp_unificado.split('\n') if l.strip()]
-                        
+                        # Extraer todas las líneas que tengan contenido real
+                        lineas_crudas = texto_wpp_unificado.split('\n')
+                        lineas = []
+                        for l in lineas_crudas:
+                            l_limpia = l.strip()
+                            if l_limpia:
+                                # Omitir horas sueltas que a veces copia WhatsApp de la interfaz (ej: 02:15 p. m.)
+                                if not re.fullmatch(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l_limpia, re.IGNORECASE):
+                                    lineas.append(l_limpia)
+
                         nombre_cliente = "Cliente WhatsApp"
                         cuerpo_busqueda = texto_wpp_unificado
 
-                        if len(lineas) > 0:
-                            # La primera línea por lo general contiene el nombre del cliente o número de WhatsApp copiado
-                            candidato_nombre = lineas[0]
+                        if len(lineas) >= 1:
+                            # La primera línea válida es el nombre del usuario de WhatsApp que resaltaste
+                            posible_nombre = lineas[0]
                             
-                            # Limpiar marcas de hora o formato si el portapapeles de WhatsApp las arrastra
-                            candidato_nombre = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', candidato_nombre).strip()
-                            candidato_nombre = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', candidato_nombre, flags=re.IGNORECASE).strip()
+                            # Limpiar marcas de corchetes de hora si las trae (ej: [14:30, 12/5/2026] Usuario)
+                            posible_nombre = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', posible_nombre).strip()
                             
-                            if candidato_nombre:
-                                nombre_cliente = candidato_nombre
+                            if posible_nombre:
+                                nombre_cliente = posible_nombre
                             
-                            # Si hay más de una línea, el cuerpo para extraer los cartones será todo lo demás
+                            # El resto del texto se usa para buscar los números de cartón y referencias
                             if len(lineas) > 1:
                                 cuerpo_busqueda = " ".join(lineas[1:])
 
-                        # Extraer estrictamente los cartones válidos (1 a 630) de todo el texto
+                        # Extraer estrictamente los cartones válidos (1 a 630)
                         nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_busqueda) if 1 <= int(n) <= 630]
                         
-                        # Si no encontró cartones en las líneas secundarias, buscar en todo el texto general por si acaso
+                        # Si por alguna razón quedaron atrapados en la primera línea o el cuerpo general
                         if not nums_wpp:
                             nums_wpp = [n for n in re.findall(r"\b\d+\b", texto_wpp_unificado) if 1 <= int(n) <= 630]
 
