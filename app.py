@@ -174,14 +174,14 @@ with tab_ventas:
                 c_e1, c_e2 = st.columns(2)
                 with c_e1:
                     nueva_ref = st.text_input(f"Actualizar Ref #{id_r}", value=referencia, max_chars=6, key=f"ref_{id_r}")
-                    if st.button("Guardar Ref", key=f```python
-                    conn = sqlite3.connect(DB_NAME)
-                    c = conn.cursor()
-                    nuevo_estado = "Cancelado" if nueva_ref.strip() else "Pendiente por Cancelar"
-                    c.execute("UPDATE ventas SET referencia=?, estado=? WHERE id=?", (nueva_ref.strip(), nuevo_estado, id_r))
-                    conn.commit()
-                    conn.close()
-                    st.rerun()
+                    if st.button("Guardar Ref", key=f"btn_ref_{id_r}"):
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        nuevo_estado = "Cancelado" if nueva_ref.strip() else "Pendiente por Cancelar"
+                        c.execute("UPDATE ventas SET referencia=?, estado=? WHERE id=?", (nueva_ref.strip(), nuevo_estado, id_r))
+                        conn.commit()
+                        conn.close()
+                        st.rerun()
                 with c_e2:
                     if st.button("🗑️ Eliminar", key=f"del_{id_r}"):
                         conn = sqlite3.connect(DB_NAME)
