@@ -111,52 +111,42 @@ with tab_ventas:
                         st.rerun()
 
         with col_btn2:
-            st.markdown("##### 📥 Importar desde WhatsApp")
+            st.markdown("##### 📥 Importar desde WhatsApp (Con Separador)")
             with st.form("form_whatsapp"):
-                texto_wpp = st.text_area("Pega todo lo resaltado de WhatsApp aquí", placeholder="Pega aquí el contacto (nombre o número) y el mensaje completo...")
+                wpp_contacto = st.text_input("1. Pega aquí el Nombre o Número de Contacto de WhatsApp", placeholder="Ej: Maria Perez o +58 412...")
+                wpp_mensaje = st.text_area("2. Pega aquí el mensaje con los cartones y ref", placeholder="Ej: Hola quiero el 12, 45 y ref 123456")
                 btn_wpp = st.form_submit_button("Procesar y Registrar")
                 
                 if btn_wpp:
-                    if not texto_wpp.strip():
-                        st.warning("El campo de texto está vacío.")
+                    nombre_limpio = wpp_contacto.strip()
+                    # Limpiar por si acaso trae marcas de hora de la interfaz de WhatsApp
+                    nombre_limpio = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', nombre_limpio).strip()
+                    nombre_limpio = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', nombre_limpio, flags=re.IGNORECASE).strip()
+                    
+                    if not nombre_limpio:
+                        nombre_limpio = "Cliente WhatsApp"
+                        
+                    if not wpp_mensaje.strip():
+                        st.warning("El campo de mensaje/cartones está vacío.")
                     else:
-                        # Separar todo el texto copiado por líneas
-                        lineas = [l.strip() for l in texto_wpp.split('\n') if l.strip()]
+                        # Extraer cartones válidos (1 a 630)
+                        nums_wpp = [n for n in re.findall(r"\b\d+\b", wpp_mensaje) if 1 <= int(n) <= 630]
                         
-                        nombre_cliente = "Cliente WhatsApp"
-                        cuerpo_texto = texto_wpp
-
-                        if len(lineas) >= 1:
-                            # La primera línea resaltada de WhatsApp corresponde al contacto (Nombre o Número)
-                            nombre_cliente = lineas[0]
-                            # El resto del texto se usa para buscar los números de cartón y la referencia
-                            cuerpo_texto = " ".join(lineas[1:]) if len(lineas) > 1 else lineas[0]
-
-                        # Limpiar marcas de hora o formato si las trae el portapapeles de WhatsApp
-                        nombre_cliente = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', nombre_cliente).strip()
-                        nombre_cliente = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', nombre_cliente, flags=re.IGNORECASE).strip()
-
-                        if not nombre_cliente:
-                            nombre_cliente = "Cliente WhatsApp"
-
-                        # Extraer estrictamente los cartones válidos (números entre 1 y 630) de todo el texto
-                        nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_texto) if 1 <= int(n) <= 630]
-                        
-                        # Buscar referencia de pago móvil (6 dígitos exactos que no sean cartones del 1 al 630)
-                        ref_wpp_match = re.search(r"\b\d{6}\b", cuerpo_texto)
+                        # Buscar referencia de pago móvil (6 dígitos exactos)
+                        ref_wpp_match = re.search(r"\b\d{6}\b", wpp_mensaje)
                         ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
                         if not nums_wpp:
-                            st.error("No se detectaron cartones válidos (1-630) en el texto copiado.")
+                            st.error("No se detectaron cartones válidos (1-630) en el mensaje.")
                         else:
                             estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                             conn = sqlite3.connect(DB_NAME)
                             c = conn.cursor()
                             c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
+                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_limpio, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
                             conn.commit()
                             conn.close()
-                            st.success(f"¡Registrado! Cliente: {nombre_cliente} | Cartones: {len(nums_wpp)}")
+                            st.success(f"¡Registrado! Cliente: {nombre_limpio} | Cartones: {len(nums_wpp)}")
                             st.rerun()
 
         with col_btn3:
