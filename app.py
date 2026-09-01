@@ -88,72 +88,66 @@ with tab_ventas:
         with col_btn1:
             st.markdown("##### ➕ Registrar Manual")
             with st.form("form_nuevo"):
-                cli_input = st.text_input("Nombre del Cliente (Solo letras)")
-                nums_input = st.text_input("Cartones (Solo números, ej: 12, 45, 100)")
+                cli_input = st.text_input("Nombre del Cliente")
+                nums_input = st.text_input("Cartones (Ej: 12, 45, 100)")
                 ref_input = st.text_input("Referencia (6 dígitos, opcional)", max_chars=6)
                 submitted = st.form_submit_button("Guardar Registro")
                 
                 if submitted:
-                    if any(char.isdigit() for char in cli_input):
-                        st.error("El nombre del cliente no debe contener números.")
-                    elif re.search(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ]', nums_input):
-                        st.error("El campo de cartones solo debe contener números separados por comas.")
+                    nums_val = [n for n in re.findall(r"\b\d+\b", nums_input) if 1 <= int(n) <= 630]
+                    if not cli_input.strip():
+                        st.error("Debe indicar el nombre del cliente.")
+                    elif not nums_val:
+                        st.error("Debe indicar al menos un cartón válido (1-630).")
                     else:
-                        nums_val = [n for n in re.findall(r"\b\d+\b", nums_input) if 1 <= int(n) <= 630]
-                        if not nums_val:
-                            st.error("Debe indicar al menos un cartón válido (1-630).")
-                        else:
-                            estado_reg = "Cancelado" if ref_input.strip() else "Pendiente por Cancelar"
-                            conn = sqlite3.connect(DB_NAME)
-                            c = conn.cursor()
-                            c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip() or "Sin Nombre", ", ".join(nums_val), len(nums_val), estado_reg, ref_input.strip()))
-                            conn.commit()
-                            conn.close()
-                            st.success("¡Cliente registrado con éxito!")
-                            st.rerun()
+                        estado_reg = "Cancelado" if ref_input.strip() else "Pendiente por Cancelar"
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(nums_val), len(nums_val), estado_reg, ref_input.strip()))
+                        conn.commit()
+                        conn.close()
+                        st.success("¡Cliente registrado con éxito!")
+                        st.rerun()
 
         with col_btn2:
             st.markdown("##### 📥 Importar desde WhatsApp")
             with st.form("form_whatsapp"):
-                texto_wpp = st.text_area("Pega el mensaje de WhatsApp aquí", placeholder="Ej:\nMaria Perez\n12, 45, 100 ref 123456")
+                texto_wpp = st.text_area("Pega todo lo resaltado de WhatsApp aquí", placeholder="Pega aquí el contacto (nombre o número) y el mensaje completo...")
                 btn_wpp = st.form_submit_button("Procesar y Registrar")
                 
                 if btn_wpp:
                     if not texto_wpp.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # Separar por líneas
+                        # Separar todo el texto copiado por líneas
                         lineas = [l.strip() for l in texto_wpp.split('\n') if l.strip()]
                         
-                        nombre_cliente = ""
+                        nombre_cliente = "Cliente WhatsApp"
                         cuerpo_texto = texto_wpp
 
-                        if len(lineas) >= 2:
-                            # 1ra Línea: Se asigna directamente como el nombre del contacto o número telefónico de WhatsApp
+                        if len(lineas) >= 1:
+                            # La primera línea resaltada de WhatsApp corresponde al contacto (Nombre o Número)
                             nombre_cliente = lineas[0]
-                            # El resto de líneas se usa para buscar cartones y referencias
-                            cuerpo_texto = " ".join(lineas[1:])
-                        else:
-                            # Si se pegó en una sola línea, se toma una porción o se asume genérico
-                            nombre_cliente = "Cliente WhatsApp"
+                            # El resto del texto se usa para buscar los números de cartón y la referencia
+                            cuerpo_texto = " ".join(lineas[1:]) if len(lineas) > 1 else lineas[0]
 
-                        # Limpiar símbolos molestos o marcas de hora de la línea del nombre si los trae
+                        # Limpiar marcas de hora o formato si las trae el portapapeles de WhatsApp
                         nombre_cliente = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', nombre_cliente).strip()
                         nombre_cliente = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', nombre_cliente, flags=re.IGNORECASE).strip()
 
                         if not nombre_cliente:
                             nombre_cliente = "Cliente WhatsApp"
 
-                        # Extraer cartones válidos (1 a 630) del cuerpo del mensaje
+                        # Extraer estrictamente los cartones válidos (números entre 1 y 630) de todo el texto
                         nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_texto) if 1 <= int(n) <= 630]
                         
-                        # Buscar referencia de pago móvil (6 dígitos exactos)
+                        # Buscar referencia de pago móvil (6 dígitos exactos que no sean cartones del 1 al 630)
                         ref_wpp_match = re.search(r"\b\d{6}\b", cuerpo_texto)
                         ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
                         if not nums_wpp:
-                            st.error("No se detectaron cartones válidos (1-630) en el mensaje.")
+                            st.error("No se detectaron cartones válidos (1-630) en el texto copiado.")
                         else:
                             estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                             conn = sqlite3.connect(DB_NAME)
@@ -204,7 +198,7 @@ with tab_ventas:
 
     st.markdown("#### 📋 Listado General de Registros")
 
-    # Mostrar todos los registros apilados uno encima del otro con su monto en bolívares
+    # Mostrar todos los registros apilados uno encima del otro de manera vertical con su monto en Bs.
     for r in filas_filtradas:
         id_r, _, cliente, numeros, cantidad, estado, referencia = r
         cant_cartones = len(re.findall(r"\b\d+\b", numeros))
@@ -229,20 +223,19 @@ with tab_ventas:
                         nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
                         
                         if st.form_submit_button("Guardar"):
-                            if re.search(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ]', nuevos_nums):
-                                st.error("Los cartones solo llevan números.")
+                            nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
+                            if not nuevo_cliente.strip():
+                                st.error("El cliente no puede estar vacío.")
+                            elif not nums_val_edit:
+                                st.error("Cartones inválidos.")
                             else:
-                                nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
-                                if not nums_val_edit:
-                                    st.error("Cartones inválidos.")
-                                else:
-                                    conn = sqlite3.connect(DB_NAME)
-                                    c = conn.cursor()
-                                    c.execute("UPDATE ventas SET cliente=?, numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                              (nuevo_cliente.strip(), ", ".join(nums_val_edit), len(nums_val_edit), nuevo_estado, nueva_ref.strip(), id_r))
-                                    conn.commit()
-                                    conn.close()
-                                    st.rerun()
+                                conn = sqlite3.connect(DB_NAME)
+                                c = conn.cursor()
+                                c.execute("UPDATE ventas SET cliente=?, numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
+                                          (nuevo_cliente.strip(), ", ".join(nums_val_edit), len(nums_val_edit), nuevo_estado, nueva_ref.strip(), id_r))
+                                conn.commit()
+                                conn.close()
+                                st.rerun()
 
                 if st.button("🗑️ Eliminar", key=f"del_{id_r}"):
                     conn = sqlite3.connect(DB_NAME)
