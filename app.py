@@ -111,50 +111,52 @@ with tab_ventas:
                         st.rerun()
 
         with col_btn2:
-            st.markdown("##### 📥 Importar Inteligente desde WhatsApp")
+            st.markdown("##### 📥 Importar Directo desde WhatsApp")
             with st.form("form_whatsapp"):
-                texto_wpp_unificado = st.text_area("Pega todo lo resaltado de WhatsApp aquí", placeholder="Pega aquí el contacto y el mensaje completo juntos. La app separará el nombre y los cartones...")
+                texto_wpp_unificado = st.text_area(
+                    "Pega aquí el contacto y el mensaje juntos", 
+                    placeholder="Pega todo (Ej: Nombre del contacto arriba y números/mensaje abajo)..."
+                )
                 btn_wpp = st.form_submit_button("Procesar y Registrar")
                 
                 if btn_wpp:
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # Limpiar y separar líneas ignorando líneas vacías
+                        # Dividir todo el bloque copiado en líneas individuales
                         lineas = [l.strip() for l in texto_wpp_unificado.split('\n') if l.strip()]
                         
                         nombre_cliente = "Cliente WhatsApp"
-                        texto_analisis = texto_wpp_unificado
+                        cuerpo_busqueda = texto_wpp_unificado
 
                         if len(lineas) > 0:
-                            # Tomamos la primera línea como candidata principal para el nombre del contacto
-                            primera_linea = lineas[0]
+                            # La primera línea por lo general contiene el nombre del cliente o número de WhatsApp copiado
+                            candidato_nombre = lineas[0]
                             
-                            # Limpieza profunda de marcas comunes de hora o interfaz copiada de WhatsApp
-                            primera_linea = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', primera_linea).strip()
-                            primera_linea = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', primera_linea, flags=re.IGNORECASE).strip()
+                            # Limpiar marcas de hora o formato si el portapapeles de WhatsApp las arrastra
+                            candidato_nombre = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', candidato_nombre).strip()
+                            candidato_nombre = re.sub(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', '', candidato_nombre, flags=re.IGNORECASE).strip()
                             
-                            # Si la primera línea tiene texto real que no sea exclusivamente números de cartón puros, lo asumimos como nombre
-                            if primera_linea and not re.fullmatch(r'\d+', primera_linea):
-                                nombre_cliente = primera_linea
-                                # El cuerpo para buscar cartones será el resto de líneas
-                                texto_analisis = " ".join(lineas[1:]) if len(lineas) > 1 else primera_linea
-                            elif len(lineas) > 1:
-                                # Si la primera línea era un número puro, buscamos si la segunda tiene nombre
-                                segunda_linea = lineas[1]
-                                if segunda_linea and not re.fullmatch(r'\d+', segunda_linea):
-                                    nombre_cliente = segunda_linea
-                                    texto_analisis = " ".join(lineas[2:]) if len(lineas) > 2 else " ".join(lineas)
+                            if candidato_nombre:
+                                nombre_cliente = candidato_nombre
+                            
+                            # Si hay más de una línea, el cuerpo para extraer los cartones será todo lo demás
+                            if len(lineas) > 1:
+                                cuerpo_busqueda = " ".join(lineas[1:])
 
-                        # Extraer estrictamente cartones válidos (1 a 630) de todo el texto analizado
-                        nums_wpp = [n for n in re.findall(r"\b\d+\b", texto_analisis) if 1 <= int(n) <= 630]
+                        # Extraer estrictamente los cartones válidos (1 a 630) de todo el texto
+                        nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_busqueda) if 1 <= int(n) <= 630]
                         
+                        # Si no encontró cartones en las líneas secundarias, buscar en todo el texto general por si acaso
+                        if not nums_wpp:
+                            nums_wpp = [n for n in re.findall(r"\b\d+\b", texto_wpp_unificado) if 1 <= int(n) <= 630]
+
                         # Buscar referencia de pago móvil (6 dígitos exactos)
-                        ref_wpp_match = re.search(r"\b\d{6}\b", texto_analisis)
+                        ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp_unificado)
                         ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
                         if not nums_wpp:
-                            st.error("No se detectaron cartones válidos (1-630) en el texto copiado.")
+                            st.error("No se detectaron cartones válidos (1-630) en el texto pegado.")
                         else:
                             estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                             conn = sqlite3.connect(DB_NAME)
