@@ -186,123 +186,57 @@ with tab_ventas:
         if not busqueda or busqueda.lower() in texto_fila:
             filas_filtradas.append(r)
 
-    # Separar en pendientes y cancelados
-    pendientes = [r for r in filas_filtradas if r[5] != "Cancelado"]
-    cancelados = [r for r in filas_filtradas if r[5] == "Cancelado"]
+    st.markdown("#### 📋 Listado General de Registros")
 
-    tot_pend_cant = sum(len(re.findall(r"\b\d+\b", r[3])) for r in pendientes)
-    tot_canc_cant = sum(len(re.findall(r"\b\d+\b", r[3])) for r in cancelados)
-
-    col_tp1, col_tp2 = st.columns(2)
-    with col_tp1:
-        st.markdown(f"⏳ **Pendientes por Cancelar** (Total: {tot_pend_cant} cartones | Bs. {tot_pend_cant * precio_unitario:,.2f})")
-    with col_tp2:
-        st.markdown(f"✅ **Cancelados** (Total: {tot_canc_cant} cartones | Bs. {tot_canc_cant * precio_unitario:,.2f})")
-
-    col_t1, col_t2 = st.columns(2)
-
-    with col_t1:
-        st.markdown("##### Lista de Pendientes")
-        for r in pendientes:
-            id_r, _, cliente, numeros, cantidad, estado, referencia = r
-            cant_cartones = len(re.findall(r"\b\d+\b", numeros))
-            monto_total = cant_cartones * precio_unitario
+    # Mostrar todos los registros apilados uno encima del otro de forma vertical
+    for r in filas_filtradas:
+        id_r, _, cliente, numeros, cantidad, estado, referencia = r
+        cant_cartones = len(re.findall(r"\b\d+\b", numeros))
+        monto_total = cant_cartones * precio_unitario
+        
+        with st.container(border=True):
+            c_info, c_acciones = st.columns([3, 1])
             
-            with st.container(border=True):
-                # Layout lineal: Información a la izquierda, botones a la derecha
-                c_info, c_acciones = st.columns([3, 1])
-                
-                with c_info:
-                    st.write(f"**👤 {cliente}**")
-                    st.caption(f"Cartones: {numeros} ({cant_cartones} unid.)")
-                    ref_txt = referencia if referencia else "Sin Ref"
-                    st.text(f"Ref: {ref_txt} | Estado: {estado}")
-                    st.markdown(f"💰 **Total: Bs. {monto_total:,.2f}**")
-                
-                with c_acciones:
-                    # Botones alineados a la derecha de forma limpia
-                    with st.expander("✏️ Editar"):
-                        with st.form(key=f"form_edit_{id_r}"):
-                            nuevo_cliente = st.text_input("Cliente", value=cliente)
-                            nuevos_nums = st.text_input("Cartones", value=numeros)
-                            nueva_ref = st.text_input("Ref (6 dig)", value=referencia, max_chars=6)
-                            nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0)
-                            
-                            if st.form_submit_button("Guardar"):
-                                if any(char.isdigit() for char in nuevo_cliente):
-                                    st.error("El nombre no debe llevar números.")
-                                elif re.search(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ]', nuevos_nums):
-                                    st.error("Los cartones solo llevan números.")
-                                else:
-                                    nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
-                                    if not nums_val_edit:
-                                        st.error("Cartones inválidos.")
-                                    else:
-                                        conn = sqlite3.connect(DB_NAME)
-                                        c = conn.cursor()
-                                        c.execute("UPDATE ventas SET cliente=?, numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                                  (nuevo_cliente.strip(), ", ".join(nums_val_edit), len(nums_val_edit), nuevo_estado, nueva_ref.strip(), id_r))
-                                        conn.commit()
-                                        conn.close()
-                                        st.rerun()
-
-                    if st.button("🗑️ Eliminar", key=f"del_{id_r}"):
-                        conn = sqlite3.connect(DB_NAME)
-                        c = conn.cursor()
-                        c.execute("DELETE FROM ventas WHERE id=?", (id_r,))
-                        conn.commit()
-                        conn.close()
-                        st.rerun()
-
-    with col_t2:
-        st.markdown("##### Lista de Cancelados")
-        for r in cancelados:
-            id_r, _, cliente, numeros, cantidad, estado, referencia = r
-            cant_cartones = len(re.findall(r"\b\d+\b", numeros))
-            monto_total = cant_cartones * precio_unitario
+            with c_info:
+                st.write(f"**👤 {cliente}** — *{estado}*")
+                st.caption(f"Cartones: {numeros} ({cant_cartones} unid.)")
+                ref_txt = referencia if referencia else "Sin Referencia"
+                st.text(f"Ref: {ref_txt}")
+                st.markdown(f"💰 **Total a Pagar: Bs. {monto_total:,.2f}**")
             
-            with st.container(border=True):
-                c_info, c_acciones = st.columns([3, 1])
-                
-                with c_info:
-                    st.write(f"**👤 {cliente}**")
-                    st.caption(f"Cartones: {numeros} ({cant_cartones} unid.)")
-                    st.text(f"Ref: {referencia} | Estado: {estado}")
-                    st.markdown(f"💰 **Total: Bs. {monto_total:,.2f}**")
-                
-                with c_acciones:
-                    with st.expander("✏️ Editar"):
-                        with st.form(key=f"form_edit_c_{id_r}"):
-                            nuevo_cliente = st.text_input("Cliente", value=cliente, key=f"nc_{id_r}")
-                            nuevos_nums = st.text_input("Cartones", value=numeros, key=f"nn_{id_r}")
-                            nueva_ref = st.text_input("Ref", value=referencia, max_chars=6, key=f"nr_{id_r}")
-                            nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=1, key=f"ne_{id_r}")
-                            
-                            if st.form_submit_button("Guardar"):
-                                if any(char.isdigit() for char in nuevo_cliente):
-                                    st.error("El nombre no debe llevar números.")
-                                elif re.search(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ]', nuevos_nums):
-                                    st.error("Los cartones solo llevan números.")
+            with c_acciones:
+                with st.expander("✏️ Editar"):
+                    with st.form(key=f"form_edit_{id_r}"):
+                        nuevo_cliente = st.text_input("Cliente", value=cliente)
+                        nuevos_nums = st.text_input("Cartones", value=numeros)
+                        nueva_ref = st.text_input("Ref (6 dig)", value=referencia, max_chars=6)
+                        nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
+                        
+                        if st.form_submit_button("Guardar"):
+                            if any(char.isdigit() for char in nuevo_cliente):
+                                st.error("El nombre no debe llevar números.")
+                            elif re.search(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ]', nuevos_nums):
+                                st.error("Los cartones solo llevan números.")
+                            else:
+                                nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
+                                if not nums_val_edit:
+                                    st.error("Cartones inválidos.")
                                 else:
-                                    nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
-                                    if not nums_val_edit:
-                                        st.error("Cartones inválidos.")
-                                    else:
-                                        conn = sqlite3.connect(DB_NAME)
-                                        c = conn.cursor()
-                                        c.execute("UPDATE ventas SET cliente=?, numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                                  (nuevo_cliente.strip(), ", ".join(nums_val_edit), len(nums_val_edit), nuevo_estado, nueva_ref.strip(), id_r))
-                                        conn.commit()
-                                        conn.close()
-                                        st.rerun()
+                                    conn = sqlite3.connect(DB_NAME)
+                                    c = conn.cursor()
+                                    c.execute("UPDATE ventas SET cliente=?, numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
+                                              (nuevo_cliente.strip(), ", ".join(nums_val_edit), len(nums_val_edit), nuevo_estado, nueva_ref.strip(), id_r))
+                                    conn.commit()
+                                    conn.close()
+                                    st.rerun()
 
-                    if st.button("🗑️ Eliminar", key=f"del_c_{id_r}"):
-                        conn = sqlite3.connect(DB_NAME)
-                        c = conn.cursor()
-                        c.execute("DELETE FROM ventas WHERE id=?", (id_r,))
-                        conn.commit()
-                        conn.close()
-                        st.rerun()
+                if st.button("🗑️ Eliminar", key=f"del_{id_r}"):
+                    conn = sqlite3.connect(DB_NAME)
+                    c = conn.cursor()
+                    c.execute("DELETE FROM ventas WHERE id=?", (id_r,))
+                    conn.commit()
+                    conn.close()
+                    st.rerun()
 
 with tab_disp:
     st.markdown("#### Matriz de Cartones (1 al 630)")
