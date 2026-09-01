@@ -116,25 +116,35 @@ with tab_ventas:
         with col_btn2:
             st.markdown("##### 📥 Importar desde WhatsApp")
             with st.form("form_whatsapp"):
-                texto_wpp = st.text_area("Pega el mensaje de WhatsApp aquí", placeholder="Ej: Hola soy María y quiero los cartones 15, 20 y ref 123456")
+                texto_wpp = st.text_area("Pega el mensaje de WhatsApp aquí", placeholder="Ej: Juan Perez 12, 45, 100 ref 123456")
                 btn_wpp = st.form_submit_button("Procesar y Registrar")
                 
                 if btn_wpp:
                     if not texto_wpp.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
+                        # Extraer cartones válidos (1 a 630)
                         nums_wpp = [n for n in re.findall(r"\b\d+\b", texto_wpp) if 1 <= int(n) <= 630]
+                        
+                        # Buscar referencia de pago móvil (6 dígitos)
                         ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp)
                         ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
                         
-                        nombre_tentativo = "Cliente WhatsApp"
-                        lineas = texto_wpp.split('\n')
-                        for l in lineas:
-                            if any(k in l.lower() for k in ["soy", "nombre", "hola", "cuenta", "pago", "carton"]):
-                                nombre_limpio = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', '', l).strip()
-                                if len(nombre_limpio) > 3:
-                                    nombre_tentativo = nombre_limpio
-                                    break
+                        # Extracción inteligente del nombre: limpiar los números encontrados y palabras de control
+                        nombre_limpio = texto_wpp
+                        # Remover los números de cartones y la referencia del texto para que quede el nombre
+                        for n in nums_wpp + ([ref_wpp] if ref_wpp else []):
+                            nombre_limpio = nombre_limpio.replace(n, "")
+                        
+                        # Limpiar símbolos molestos y dejar solo letras y espacios
+                        nombre_limpio = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', '', nombre_limpio)
+                        # Quitar palabras comunes de relleno en chats
+                        for palabra in ["ref", "pago", "carton", "cartones", "hola", "por", "favor", "quiero", "soy"]:
+                            nombre_limpio = re.sub(rf'\b{palabra}\b', '', nombre_limpio, flags=re.IGNORECASE)
+                        
+                        nombre_limpio = " ".join(nombre_limpio.split()).strip()
+                        if not nombre_limpio or len(nombre_limpio) < 2:
+                            nombre_limpio = "Cliente WhatsApp"
                         
                         if not nums_wpp:
                             st.error("No se detectaron cartones válidos (1-630) en el mensaje.")
@@ -143,10 +153,10 @@ with tab_ventas:
                             conn = sqlite3.connect(DB_NAME)
                             c = conn.cursor()
                             c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_tentativo, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
+                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_limpio, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
                             conn.commit()
                             conn.close()
-                            st.success(f"¡Registrado con éxito! Cartones: {len(nums_wpp)} | Ref: {ref_wpp or 'Ninguna'}")
+                            st.success(f"¡Registrado! Cliente: {nombre_limpio} | Cartones: {len(nums_wpp)}")
                             st.rerun()
 
         with col_btn3:
@@ -188,7 +198,7 @@ with tab_ventas:
 
     st.markdown("#### 📋 Listado General de Registros")
 
-    # Mostrar todos los registros apilados uno encima del otro de forma vertical
+    # Mostrar todos los registros apilados uno encima del otro con su monto en bolívares
     for r in filas_filtradas:
         id_r, _, cliente, numeros, cantidad, estado, referencia = r
         cant_cartones = len(re.findall(r"\b\d+\b", numeros))
