@@ -86,11 +86,11 @@ with tab_ventas:
         col_btn1, col_btn2, col_btn3 = st.columns(3)
         
         with col_btn1:
-            st.markdown("##### ➕ Registrar Nuevo Cliente")
+            st.markdown("##### ➕ Registrar Manual")
             with st.form("form_nuevo"):
                 cli_input = st.text_input("Nombre del Cliente")
                 nums_input = st.text_input("Cartones (ej: 12, 45, 100)")
-                ref_input = st.text_input("Referencia de Pago (6 dígitos, opcional)", max_chars=6)
+                ref_input = st.text_input("Referencia (6 dígitos, opcional)", max_chars=6)
                 submitted = st.form_submit_button("Guardar Registro")
                 
                 if submitted:
@@ -105,16 +105,56 @@ with tab_ventas:
                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip() or "Sin Nombre", ", ".join(nums_val), len(nums_val), estado_reg, ref_input.strip()))
                         conn.commit()
                         conn.close()
-                        st.success("¡Cliente registrado con éxito!")
+                        st.success("¡Cliente registrado!")
                         st.rerun()
 
         with col_btn2:
-            st.markdown("##### 🎲 Asignación Rápida al Azar")
-            cant_azar = st.number_input("Cantidad de cartones al azar", min_value=1, max_value=630, value=1)
-            if st.button("🎲 Generar y Asignar"):
+            st.markdown("##### 📥 Importar desde WhatsApp")
+            with st.form("form_whatsapp"):
+                texto_wpp = st.text_area("Pega el mensaje de WhatsApp aquí", placeholder="Ej: Hola soy María y quiero los cartones 15, 20 y ref 123456")
+                btn_wpp = st.form_submit_button("Procesar y Registrar")
+                
+                if btn_wpp:
+                    if not texto_wpp.strip():
+                        st.warning("El campo de texto está vacío.")
+                    else:
+                        # Extraer cartones válidos (1 a 630)
+                        nums_wpp = [n for n in re.findall(r"\b\d+\b", texto_wpp) if 1 <= int(n) <= 630]
+                        # Buscar posible referencia de pago móvil (6 dígitos seguidos)
+                        ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp)
+                        ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
+                        
+                        # Limpiar texto para intentar adivinar el nombre (remover números largos y palabras clave)
+                        nombre_tentativo = "Cliente WhatsApp"
+                        lineas = texto_wpp.split('\n')
+                        for l in lineas:
+                            if any(k in l.lower() for k in ["soy", "nombre", "hola", "cuenta", "pago", "carton"]):
+                                # Intento sencillo de extraer nombre limpio
+                                nombre_limpio = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]', '', l).strip()
+                                if len(nombre_limpio) > 3:
+                                    nombre_tentativo = nombre_limpio
+                                    break
+                        
+                        if not nums_wpp:
+                            st.error("No se detectaron cartones válidos (1-630) en el mensaje.")
+                        else:
+                            estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
+                            conn = sqlite3.connect(DB_NAME)
+                            c = conn.cursor()
+                            c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_tentativo, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"¡Registrado con éxito! Cartones: {len(nums_wpp)} | Ref: {ref_wpp or 'Ninguna'}")
+                            st.rerun()
+
+        with col_btn3:
+            st.markdown("##### 🎲 Al Azar y 🗑️ Borrar")
+            cant_azar = st.number_input("Cartones al azar", min_value=1, max_value=630, value=1)
+            if st.button("🎲 Asignar al Azar"):
                 disponibles = [n for n in range(1, 631) if n not in cartones_ocupados]
                 if len(disponibles) < cant_azar:
-                    st.error(f"Solo quedan {len(disponibles)} cartones disponibles.")
+                    st.error(f"Solo quedan {len(disponibles)} libres.")
                 else:
                     seleccionados = sorted(random.sample(disponibles, cant_azar))
                     conn = sqlite3.connect(DB_NAME)
@@ -123,18 +163,16 @@ with tab_ventas:
                               (datetime.now().strftime("%Y-%m-%d %H:%M"), "Cliente Rápido", ", ".join(map(str, seleccionados)), cant_azar, "Pendiente por Cancelar", ""))
                     conn.commit()
                     conn.close()
-                    st.success(f"¡Se asignaron {cant_azar} cartones al azar!")
+                    st.success(f"¡Asignados {cant_azar} cartones!")
                     st.rerun()
-
-        with col_btn3:
-            st.markdown("##### 🔥 Zona de Peligro")
-            if st.button("🗑️ Borrar Todos los Registros", type="primary"):
+            
+            if st.button("🗑️ Borrar Todo", type="primary"):
                 conn = sqlite3.connect(DB_NAME)
                 c = conn.cursor()
                 c.execute("DELETE FROM ventas")
                 conn.commit()
                 conn.close()
-                st.warning("Se ha borrado toda la base de datos.")
+                st.warning("Base de datos limpia.")
                 st.rerun()
 
     st.divider()
@@ -210,7 +248,6 @@ with tab_disp:
     st.markdown("#### Matriz de Cartones (1 al 630)")
     st.caption("🟢 Verde: Libre  |  🔴 Rojo: Ocupado")
     
-    # Dibujar la matriz en filas de 18 columnas de forma visual limpia
     cols_por_fila = 18
     for i in range(0, 630, cols_por_fila):
         cols = st.columns(cols_por_fila)
