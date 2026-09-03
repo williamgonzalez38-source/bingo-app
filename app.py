@@ -83,7 +83,7 @@ def obtener_fuente(size):
             continue
     return ImageFont.load_default()
 
-# Función para generar la imagen con 20 columnas y números máximos del tamaño de la celda
+# Función para generar la imagen con el diseño exacto de la referencia (libres grandes, ocupados pequeños)
 def generar_imagen_base64(libres):
     cols = 20  # 20 columnas exactas
     total_items = 630
@@ -104,12 +104,13 @@ def generar_imagen_base64(libres):
     font_title = obtener_fuente(32)
     font_subtitle = obtener_fuente(20)
     
-    # 💥 FUENTE GIGANTE MÁXIMA DE 68 PT: Llena prácticamente todo el recuadro de la celda
-    font_grid_bold = obtener_fuente(68)
+    # Fuentes para los números (Libres grandes y marcados; Ocupados pequeños y sutiles)
+    font_grid_libres = obtener_fuente(60)
+    font_grid_ocupados = obtener_fuente(22)
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 68), f"Disponibles: {len(libres)} / 630  |  Números a tamaño completo de celda", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 68), f"Disponibles: {len(libres)} / 630  |  Diseño optimizado para WhatsApp", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -123,14 +124,14 @@ def generar_imagen_base64(libres):
         x2 = x1 + cell_w - 4
         y2 = y1 + cell_h - 4
         
+        text = str(n)
+        
         if n in libres:
-            # Cuadro con fondo limpio y borde nítido
+            # Cuadro libre: Fondo blanco/claro, borde nítido y número grande
             draw.rectangle([x1, y1, x2, y2], fill="#f8fafc", outline="#94a3b8", width=2)
-            text = str(n)
             
-            # Centrado automático de precisión para que ocupe todo el espacio disponible
             try:
-                bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
+                bbox = draw.textbbox((0, 0), text, font=font_grid_libres)
                 tw = bbox[2] - bbox[0]
                 th = bbox[3] - bbox[1]
             except:
@@ -139,11 +140,22 @@ def generar_imagen_base64(libres):
             tx = x1 + ((x2 - x1) - tw) / 2
             ty = y1 + ((y2 - y1) - th) / 2 - 6
             
-            # Número en negro puro y negrita máxima
-            draw.text((tx, ty), text, fill="#000000", font=font_grid_bold)
+            draw.text((tx, ty), text, fill="#000000", font=font_grid_libres)
         else:
-            # Ocupado: Celda totalmente en blanco
-            pass
+            # Cuadro ocupado: Fondo sutil y número pequeño gris (exacto a tu referencia)
+            draw.rectangle([x1, y1, x2, y2], fill="#f1f5f9", outline="#e2e8f0", width=1)
+            
+            try:
+                bbox = draw.textbbox((0, 0), text, font=font_grid_ocupados)
+                tw = bbox[2] - bbox[0]
+                th = bbox[3] - bbox[1]
+            except:
+                tw, th = 20, 20
+                
+            tx = x1 + ((x2 - x1) - tw) / 2
+            ty = y1 + ((y2 - y1) - th) / 2
+            
+            draw.text((tx, ty), text, fill="#cbd5e1", font=font_grid_ocupados)
         
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -432,9 +444,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
 elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
-    st.caption("✨ Visualización interactiva con números grandes y legibles (Idéntica a la imagen para WhatsApp)")
+    st.caption("✨ Visualización interactiva idéntica al diseño de tu referencia (libres destacados, ocupados sutiles)")
     
-    # Matriz interactiva en pantalla con el mismo diseño visual de números gigantes
+    # Matriz en pantalla replicando el mismo estilo visual de la referencia
     html_matriz = """
     <div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; overflow-x: auto;">
         <div style="display: grid; grid-template-columns: repeat(20, minmax(42px, 1fr)); gap: 4px;">
@@ -450,10 +462,9 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
                 text-align: center;
                 padding: 10px 0;
                 font-family: Arial, sans-serif;
-                font-weight: bold;
-                font-size: 10px;
+                font-weight: normal;
+                font-size: 11px;
                 color: #cbd5e1;
-                opacity: 0.3;
             ">{num}</div>
             """
         else:
