@@ -68,14 +68,14 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen en base64 con números en tamaño 24 y celdas perfectamente proporcionadas
+# Función para generar la imagen en base64 con números en tamaño 28 y celdas optimizadas
 def generar_imagen_base64(libres):
     cols = 21  # 21 columnas para mantener el balance horizontal
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    cell_w = 54  # Celdas optimizadas para acomodar la fuente de tamaño 24 sin amontonarse
-    cell_h = 42  # Altura proporcional
+    cell_w = 60  # Celdas más amplias para albergar cómodamente el tamaño 28
+    cell_h = 48  # Altura optimizada para darles espacio vertical
     margin = 28
     header_h = 75
     
@@ -89,14 +89,14 @@ def generar_imagen_base64(libres):
     try:
         font_title = ImageFont.truetype("arial.ttf", 20)
         font_subtitle = ImageFont.truetype("arial.ttf", 13)
-        # Fuente configurada exactamente en tamaño 24 en negrita
-        font_grid_bold = ImageFont.truetype("arialbd.ttf", 24) 
+        # 🎴 FUENTE ELEVADA A TAMAÑO 28 EN NEGRITA
+        font_grid_bold = ImageFont.truetype("arialbd.ttf", 28) 
     except:
         font_title = font_subtitle = font_grid_bold = ImageFont.load_default()
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 15), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 45), f"Disponibles: {len(libres)} / 630  |  Visualización con fuente de 24 pt", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 45), f"Disponibles: {len(libres)} / 630  |  Visualización de alto impacto (28 pt)", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -109,7 +109,7 @@ def generar_imagen_base64(libres):
         y1 = start_y + (r * cell_h)
         
         if n in libres:
-            # Disponible: Número en negro puro (#000000) con fuente de 24 pt, negrita y centrado exacto
+            # Disponible: Número en negro puro (#000000) con fuente de 28 pt, negrita y centrado exacto
             text = str(n)
             bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
             tw = bbox[2] - bbox[0]
