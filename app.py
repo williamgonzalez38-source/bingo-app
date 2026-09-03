@@ -68,7 +68,7 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen en base64: disponibles en negrita/negro y ocupados totalmente transparentes (vacíos)
+# Función para generar la imagen en base64 sin líneas de cuadrícula: solo números negros (disponibles) sobre fondo totalmente limpio
 def generar_imagen_base64(libres):
     cols = 15
     total_items = 630
@@ -82,6 +82,7 @@ def generar_imagen_base64(libres):
     img_w = (cols * cell_w) + (margin * 2)
     img_h = (rows * cell_h) + (margin * 2) + header_h
     
+    # Fondo general blanco puro
     img = Image.new("RGB", (img_w, img_h), color="#FFFFFF")
     draw = ImageDraw.Draw(img)
     
@@ -89,13 +90,12 @@ def generar_imagen_base64(libres):
         font_title = ImageFont.truetype("arial.ttf", 22)
         font_subtitle = ImageFont.truetype("arial.ttf", 14)
         font_grid_bold = ImageFont.truetype("arialbd.ttf", 14) 
-        font_grid_normal = ImageFont.truetype("arial.ttf", 13)
     except:
-        font_title = font_subtitle = font_grid_bold = font_grid_normal = ImageFont.load_default()
+        font_title = font_subtitle = font_grid_bold = ImageFont.load_default()
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 55), f"Disponibles: {len(libres)} / 630  |  Fondo Blanco / Ocupados Transparentes", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 55), f"Disponibles: {len(libres)} / 630  |  Sin líneas de cuadrícula", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -106,26 +106,20 @@ def generar_imagen_base64(libres):
         
         x1 = start_x + (c * cell_w)
         y1 = start_y + (r * cell_h)
-        x2 = x1 + cell_w
-        y2 = y1 + cell_h
         
         if n in libres:
-            # Disponible: Fondo blanco, borde definido, texto en negro puro y negrita real
-            draw.rectangle([x1, y1, x2, y2], fill="#FFFFFF", outline="#94a3b8", width=1)
-            color_texto = "#000000"
-            font_usada = font_grid_bold
-            
+            # Disponible: Dibujamos únicamente el número en negro negrita, sin bordes ni rayas de fondo
             text = str(n)
-            bbox = draw.textbbox((0, 0), text, font=font_usada)
+            bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
             tw = bbox[2] - bbox[0]
             th = bbox[3] - bbox[1]
             tx = x1 + (cell_w - tw) / 2
             ty = y1 + (cell_h - th) / 2
             
-            draw.text((tx, ty), text, fill=color_texto, font=font_usada)
+            draw.text((tx, ty), text, fill="#000000", font=font_grid_bold)
         else:
-            # Ocupado: Fondo blanco limpio y sin texto (totalmente transparente/vacío)
-            draw.rectangle([x1, y1, x2, y2], fill="#FFFFFF", outline="#e2e8f0", width=1)
+            # Ocupado: Se deja totalmente en blanco (transparente/vacío sin ningún trazo ni raya)
+            pass
         
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -352,7 +346,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
     filas_filtradas = []
     for r in filas_db:
-        id_r, fecha, cliente, numeros, cantidad, estado, referencia = r
+        id_r, _, cliente, numeros, _, _, referencia = r
         texto_fila = f"{cliente} {numeros} {referencia}".lower()
         if not busqueda or busqueda.lower() in texto_fila:
             filas_filtradas.append(r)
