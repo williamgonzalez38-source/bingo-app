@@ -36,19 +36,25 @@ def init_db():
 
 init_db()
 
-# Estilos CSS personalizados
+# Estilos CSS personalizados para botones cuadrados y compactos en la barra lateral
 st.markdown("""
     <style>
     .main { background-color: #0f172a; color: #f8fafc; }
     .stTextInput input, .stNumberInput input { background-color: #1e293b; color: white; border: 1px solid #334155; }
     section[data-testid="stSidebar"] { background-color: #0b1120; }
     
-    /* Reducir tamaño y padding de los botones específicos de la barra lateral */
+    /* Convertir los botones del menú lateral en cuadrados pequeños y compactos */
     section[data-testid="stSidebar"] div.stButton > button {
-        padding: 4px 10px !important;
-        font-size: 13px !important;
-        min-height: 32px !important;
-        border-radius: 5px !important;
+        width: 38px !important;
+        height: 38px !important;
+        min-height: 38px !important;
+        padding: 0px !important;
+        font-size: 16px !important;
+        border-radius: 6px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        margin: 0 auto 6px auto !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -83,7 +89,7 @@ def obtener_fuente(size):
             continue
     return ImageFont.load_default()
 
-# Función para generar la imagen con números ocupados más claros (efecto semitransparente/atenuado)
+# Función para generar la imagen con números ocupados en tono translúcido/atenuado (#e2e8f0)
 def generar_imagen_base64(libres):
     cols = 20  # 20 columnas exactas por fila
     total_items = 630
@@ -132,23 +138,23 @@ def generar_imagen_base64(libres):
     buf.seek(0)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-# Menú lateral fijo en la barra lateral con botones estilizados más compactos
+# Menú lateral con botones cuadrados pequeños y minimalistas (usando iconos con Tooltips explicativos)
 with st.sidebar:
-    st.markdown("### 🧭 Menú de Navegación")
+    st.markdown("### 🧭 Menú")
     st.markdown("---")
     
     if "menu_activo" not in st.session_state:
         st.session_state["menu_activo"] = "📋 Ventas y Registro"
 
-    if st.button("📊 Resumen General", use_container_width=True):
+    if st.button("📊", use_container_width=True, help="Resumen General"):
         st.session_state["menu_activo"] = "📊 Resumen General"
         st.rerun()
         
-    if st.button("📋 Ventas y Registro", use_container_width=True):
+    if st.button("📋", use_container_width=True, help="Ventas y Registro"):
         st.session_state["menu_activo"] = "📋 Ventas y Registro"
         st.rerun()
         
-    if st.button("🎟️ Matriz (1-630)", use_container_width=True):
+    if st.button("🎟️", use_container_width=True, help="Matriz (1-630)"):
         st.session_state["menu_activo"] = "🎟️ Matriz (1-630)"
         st.rerun()
 
