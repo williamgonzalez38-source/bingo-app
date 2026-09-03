@@ -36,31 +36,31 @@ def init_db():
 
 init_db()
 
-# Estilos CSS personalizados para una barra lateral muy angosta y compacta
+# Estilos CSS para barra lateral ultra compacta y optimización máxima de espacio
 st.markdown("""
     <style>
-    .main { background-color: #0f172a; color: #f8fafc; padding-top: 1rem; }
-    .stTextInput input, .stNumberInput input { background-color: #1e293b; color: white; border: 1px solid #334155; }
+    .main { background-color: #0f172a; color: #f8fafc; padding-top: 0.5rem; }
+    .stTextInput input, .stNumberInput input { background-color: #1e293b; color: white; border: 1px solid #334155; height: 32px; }
     
-    /* Reducir drásticamente el ancho de la barra lateral */
+    /* Barra lateral ultra angosta (100px) */
     section[data-testid="stSidebar"] { 
         background-color: #0b1120; 
-        min-width: 140px !important; 
-        max-width: 140px !important; 
+        min-width: 100px !important; 
+        max-width: 100px !important; 
     }
     
-    /* Botones cuadrados muy pequeños y centrados en la barra lateral angosta */
+    /* Botones cuadrados pequeños y centrados en la barra lateral */
     section[data-testid="stSidebar"] div.stButton > button {
-        width: 36px !important;
-        height: 36px !important;
-        min-height: 36px !important;
+        width: 34px !important;
+        height: 34px !important;
+        min-height: 34px !important;
         padding: 0px !important;
-        font-size: 15px !important;
+        font-size: 14px !important;
         border-radius: 6px !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        margin: 0 auto 6px auto !important;
+        margin: 0 auto 5px auto !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -115,7 +115,7 @@ def generar_imagen_base64(libres):
     draw = ImageDraw.Draw(img)
     
     font_title = obtener_fuente(20)
-    font_grid = obtener_fuente(16) # Mantiene el mismo tamaño exacto para todos
+    font_grid = obtener_fuente(16)
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin_x, 15), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
@@ -144,7 +144,7 @@ def generar_imagen_base64(libres):
     buf.seek(0)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-# Menú lateral angosta con botones cuadrados compactos y tooltips
+# Menú lateral ultra angosta con botones cuadrados compactos y tooltips
 with st.sidebar:
     st.markdown("### 🧭 Menú")
     st.markdown("---")
