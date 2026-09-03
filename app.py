@@ -68,15 +68,15 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen en base64 con celdas y números ligeramente más grandes pero conservando un formato horizontal balanceado
+# Función para generar la imagen en base64 con números aún más grandes y perfectamente proporcionados
 def generar_imagen_base64(libres):
-    cols = 21  # 21 columnas para mantener el formato horizontal equilibrado
+    cols = 21  # 21 columnas para mantener el balance horizontal
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    cell_w = 46  # Aumentado ligeramente para dar espacio a números más grandes
-    cell_h = 34  # Ajustado ligeramente en altura para que los 630 cartones quepan de forma proporcional
-    margin = 26
+    cell_w = 50  # Celdas más amplias para acomodar números grandes sin amontonarse
+    cell_h = 38  # Ajuste proporcional de altura para que los 630 cartones quepan perfectamente
+    margin = 28
     header_h = 75
     
     img_w = (cols * cell_w) + (margin * 2)
@@ -89,14 +89,14 @@ def generar_imagen_base64(libres):
     try:
         font_title = ImageFont.truetype("arial.ttf", 20)
         font_subtitle = ImageFont.truetype("arial.ttf", 13)
-        # Tamaño de fuente aumentado para que los números se distingan mucho mejor
-        font_grid_bold = ImageFont.truetype("arialbd.ttf", 17) 
+        # Tamaño de fuente maximizado para lograr una lectura clara y destacada
+        font_grid_bold = ImageFont.truetype("arialbd.ttf", 20) 
     except:
         font_title = font_subtitle = font_grid_bold = ImageFont.load_default()
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 15), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 45), f"Disponibles: {len(libres)} / 630  |  Números más grandes y claros", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 45), f"Disponibles: {len(libres)} / 630  |  Números grandes en alta visibilidad", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -109,7 +109,7 @@ def generar_imagen_base64(libres):
         y1 = start_y + (r * cell_h)
         
         if n in libres:
-            # Disponible: Número en negro puro (#000000) con fuente más grande y negrita, sin líneas ni bordes
+            # Disponible: Número en negro puro (#000000) con fuente grande, negrita y centrado exacto
             text = str(n)
             bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
             tw = bbox[2] - bbox[0]
