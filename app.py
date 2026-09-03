@@ -36,20 +36,26 @@ def init_db():
 
 init_db()
 
-# Estilos CSS personalizados para botones cuadrados y compactos en la barra lateral
+# Estilos CSS personalizados para una barra lateral muy angosta y compacta
 st.markdown("""
     <style>
-    .main { background-color: #0f172a; color: #f8fafc; }
+    .main { background-color: #0f172a; color: #f8fafc; padding-top: 1rem; }
     .stTextInput input, .stNumberInput input { background-color: #1e293b; color: white; border: 1px solid #334155; }
-    section[data-testid="stSidebar"] { background-color: #0b1120; }
     
-    /* Convertir los botones del menú lateral en cuadrados pequeños y compactos */
+    /* Reducir drásticamente el ancho de la barra lateral */
+    section[data-testid="stSidebar"] { 
+        background-color: #0b1120; 
+        min-width: 140px !important; 
+        max-width: 140px !important; 
+    }
+    
+    /* Botones cuadrados muy pequeños y centrados en la barra lateral angosta */
     section[data-testid="stSidebar"] div.stButton > button {
-        width: 38px !important;
-        height: 38px !important;
-        min-height: 38px !important;
+        width: 36px !important;
+        height: 36px !important;
+        min-height: 36px !important;
         padding: 0px !important;
-        font-size: 16px !important;
+        font-size: 15px !important;
         border-radius: 6px !important;
         display: flex !important;
         align-items: center !important;
@@ -138,7 +144,7 @@ def generar_imagen_base64(libres):
     buf.seek(0)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-# Menú lateral con botones cuadrados pequeños y minimalistas (usando iconos con Tooltips explicativos)
+# Menú lateral angosta con botones cuadrados compactos y tooltips
 with st.sidebar:
     st.markdown("### 🧭 Menú")
     st.markdown("---")
