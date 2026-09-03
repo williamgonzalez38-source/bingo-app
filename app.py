@@ -32,7 +32,7 @@ def init_db():
 
 init_db()
 
-# Estilos CSS personalizados para mantener el tono oscuro y elegante de tu app original
+# Estilos CSS personalizados para mantener el tono oscuro y elegante
 st.markdown("""
     <style>
     .main { background-color: #0f172a; color: #f8fafc; }
@@ -40,15 +40,6 @@ st.markdown("""
     section[data-testid="stSidebar"] { background-color: #0b1120; }
     </style>
 """, unsafe_allow_html=True)
-
-# Cabecera superior
-st.markdown("### 🎴 Control de Jugadores y Cartones")
-
-col_head1, col_head2, col_head3 = st.columns([3, 1.5, 1.5])
-with col_head1:
-    busqueda = st.text_input("🔍 Buscar...", placeholder="Cliente, número o ref...", label_visibility="collapsed")
-with col_head3:
-    precio_unitario = st.number_input("💲 Precio por cartón:", min_value=1.0, value=350.0, step=10.0)
 
 # Obtener datos de la base de datos
 def obtener_ventas():
@@ -65,7 +56,7 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Menú lateral fijo en la barra lateral con opciones una debajo de otra
+# Menú lateral fijo en la barra lateral con opciones una debajo de otra (sin desplegables)
 with st.sidebar:
     st.markdown("### 🧭 Menú de Navegación")
     st.markdown("---")
@@ -86,6 +77,33 @@ with st.sidebar:
         st.rerun()
 
 menu_seleccionado = st.session_state["menu_activo"]
+
+# Cabecera superior rediseñada: Buscador, Precio y el botón compacto de "Copiar disponibles" al lado
+st.markdown("### 🎴 Control de Jugadores y Cartones")
+
+col_head1, col_head2, col_head3, col_head4 = st.columns([2.2, 1.2, 1.2, 1.4])
+with col_head1:
+    busqueda = st.text_input("🔍 Buscar...", placeholder="Cliente, número o ref...", label_visibility="collapsed")
+with col_head3:
+    precio_unitario = st.number_input("💲 Precio:", min_value=1.0, value=350.0, step=10.0, label_visibility="collapsed")
+with col_head4:
+    # Botón compacto en la parte superior al lado de la búsqueda y precio
+    libres_actuales = [n for n in range(1, 631) if n not in cartones_ocupados]
+    
+    # Generamos el formato de cuadrícula limpia y ordenada en bloques fijos para WhatsApp
+    lineas_matriz = []
+    chunk_size = 10
+    for i in range(0, len(libres_actuales), chunk_size):
+        bloque = libres_actuales[i:i + chunk_size]
+        linea_str = " ".join([f"*{n}*" for n in bloque])
+        lineas_matriz.append(linea_str)
+    
+    texto_copia = f"🎴 *CARTONES DISPONIBLES* 🎴\n*(Total libres: {len(libres_actuales)})*\n" + "▫️" * 12 + "\n" + "\n".join(lineas_matriz)
+    
+    # Usamos st.code o una cajita de texto compacta para garantizar que el usuario pueda copiar con facilidad un 100% de efectividad en cualquier navegador
+    with st.popover("📋 Copiar disponibles"):
+        st.caption("Selecciona y copia el texto de abajo:")
+        st.code(texto_copia, language="markdown")
 
 if menu_seleccionado == "📊 Resumen General":
     st.markdown("#### Resumen General de la Partida")
@@ -129,31 +147,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     conn.close()
                     st.success("¡Cliente registrado con éxito!")
                     st.rerun()
-
-        # Único botón solicitado con formato de cuadrícula ordenada en bloques limpios tipo texto/cuadrícula para WhatsApp
-        with st.container(border=True):
-            col_disp_info, col_disp_btn = st.columns([3, 1])
-            with col_disp_info:
-                st.markdown("##### 📋 Copiar Registro de Cartones Disponibles")
-                st.caption("Genera una cuadrícula ordenada con fondo blanco simulado, números en negro y formato listo para WhatsApp.")
-            with col_disp_btn:
-                if st.button("Copiar registro de cartones disponibles", use_container_width=True):
-                    libres = [n for n in range(1, 631) if n not in cartones_ocupados]
-                    
-                    # Estructura de cuadrícula ordenada en filas de 10 números con caracteres limpios
-                    lineas_matriz = []
-                    chunk_size = 10
-                    for i in range(0, len(libres), chunk_size):
-                        bloque = libres[i:i + chunk_size]
-                        # Aseguramos un espaciado uniforme y negrita para cada número
-                        linea_str = " ".join([f"*{n:03d}*" if n < 100 else f"*{n}*" for n in bloque])
-                        lineas_matriz.append(linea_str)
-                    
-                    header_wpp = f"🎴 *REGISTRO DE CARTONES DISPONIBLES* 🎴\n*(Total libres: {len(libres)} / 630)*\n" + "⬜" * 12 + "\n"
-                    st.session_state["texto_cuadricula_wpp"] = header_wpp + "\n".join(lineas_matriz)
-
-            if "texto_cuadricula_wpp" in st.session_state and st.session_state["texto_cuadricula_wpp"]:
-                st.text_area("Cuadrícula lista para WhatsApp (copia este cuadro):", value=st.session_state["texto_cuadricula_wpp"], height=130, key="txt_cuadricula_output")
 
         st.divider()
 
