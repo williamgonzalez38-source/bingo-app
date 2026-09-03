@@ -84,36 +84,45 @@ if menu_seleccionado == "📊 Resumen General":
     col_m3.metric("Recaudación Estimada", f"Bs. {recaudacion_total:,.2f}")
 
 elif menu_seleccionado == "📋 Ventas y Registro":
-    # Botonera de acciones rápidas superior
+    # Botonera de acciones rápidas superior reorganizada por niveles
     with st.expander("➕ Opciones de Registro y Asignación Rápida", expanded=True):
-        col_btn1, col_btn2, col_btn3 = st.columns(3)
         
-        with col_btn1:
-            st.markdown("##### ➕ Registrar Manual")
-            with st.form("form_nuevo"):
+        # Fila Superior: Registro Manual como protagonista principal
+        st.markdown("##### ➕ Registrar Manual")
+        with st.form("form_nuevo"):
+            col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
+            with col_f1:
                 cli_input = st.text_input("Nombre del Cliente")
+            with col_f2:
                 nums_input = st.text_input("Cartones (Ej: 12, 45, 100)")
-                ref_input = st.text_input("Referencia (6 dígitos, opcional)", max_chars=6)
-                submitted = st.form_submit_button("Guardar Registro")
-                
-                if submitted:
-                    nums_val = [n for n in re.findall(r"\b\d+\b", nums_input) if 1 <= int(n) <= 630]
-                    if not cli_input.strip():
-                        st.error("Debe indicar el nombre del cliente.")
-                    elif not nums_val:
-                        st.error("Debe indicar al menos un cartón válido (1-630).")
-                    else:
-                        estado_reg = "Cancelado" if ref_input.strip() else "Pendiente por Cancelar"
-                        conn = sqlite3.connect(DB_NAME)
-                        c = conn.cursor()
-                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(nums_val), len(nums_val), estado_reg, ref_input.strip()))
-                        conn.commit()
-                        conn.close()
-                        st.success("¡Cliente registrado con éxito!")
-                        st.rerun()
+            with col_f3:
+                ref_input = st.text_input("Referencia (6 dígitos)", max_chars=6)
+            
+            submitted = st.form_submit_button("Guardar Registro")
+            
+            if submitted:
+                nums_val = [n for n in re.findall(r"\b\d+\b", nums_input) if 1 <= int(n) <= 630]
+                if not cli_input.strip():
+                    st.error("Debe indicar el nombre del cliente.")
+                elif not nums_val:
+                    st.error("Debe indicar al menos un cartón válido (1-630).")
+                else:
+                    estado_reg = "Cancelado" if ref_input.strip() else "Pendiente por Cancelar"
+                    conn = sqlite3.connect(DB_NAME)
+                    c = conn.cursor()
+                    c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                              (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(nums_val), len(nums_val), estado_reg, ref_input.strip()))
+                    conn.commit()
+                    conn.close()
+                    st.success("¡Cliente registrado con éxito!")
+                    st.rerun()
 
-        with col_btn2:
+        st.divider()
+
+        # Fila Inferior: Importar desde WhatsApp y Acciones al Azar / Borrar organizadas lado a lado
+        col_inf1, col_inf2 = st.columns(2)
+        
+        with col_inf1:
             st.markdown("##### 📥 Importar Directo desde WhatsApp")
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
@@ -126,13 +135,11 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # Extraer todas las líneas que tengan contenido real
                         lineas_crudas = texto_wpp_unificado.split('\n')
                         lineas = []
                         for l in lineas_crudas:
                             l_limpia = l.strip()
                             if l_limpia:
-                                # Omitir horas sueltas que a veces copia WhatsApp de la interfaz (ej: 02:15 p. m.)
                                 if not re.fullmatch(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l_limpia, re.IGNORECASE):
                                     lineas.append(l_limpia)
 
@@ -140,27 +147,17 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         cuerpo_busqueda = texto_wpp_unificado
 
                         if len(lineas) >= 1:
-                            # La primera línea válida es el nombre del usuario de WhatsApp que resaltaste
                             posible_nombre = lineas[0]
-                            
-                            # Limpiar marcas de corchetes de hora si las trae (ej: [14:30, 12/5/2026] Usuario)
                             posible_nombre = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', posible_nombre).strip()
-                            
                             if posible_nombre:
                                 nombre_cliente = posible_nombre
-                            
-                            # El resto del texto se usa para buscar los números de cartón y referencias
                             if len(lineas) > 1:
                                 cuerpo_busqueda = " ".join(lineas[1:])
 
-                        # Extraer estrictamente los cartones válidos (1 a 630)
                         nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_busqueda) if 1 <= int(n) <= 630]
-                        
-                        # Si por alguna razón quedaron atrapados en la primera línea o el cuerpo general
                         if not nums_wpp:
                             nums_wpp = [n for n in re.findall(r"\b\d+\b", texto_wpp_unificado) if 1 <= int(n) <= 630]
 
-                        # Buscar referencia de pago móvil (6 dígitos exactos)
                         ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp_unificado)
                         ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
@@ -177,32 +174,34 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             st.success(f"¡Registrado! Cliente: {nombre_cliente} | Cartones: {len(nums_wpp)}")
                             st.rerun()
 
-        with col_btn3:
+        with col_inf2:
             st.markdown("##### 🎲 Al Azar y 🗑️ Borrar")
-            cant_azar = st.number_input("Cartones al azar", min_value=1, max_value=630, value=1)
-            if st.button("🎲 Asignar al Azar"):
-                disponibles = [n for n in range(1, 631) if n not in cartones_ocupados]
-                if len(disponibles) < cant_azar:
-                    st.error(f"Solo quedan {len(disponibles)} libres.")
-                else:
-                    seleccionados = sorted(random.sample(disponibles, cant_azar))
+            with st.container(border=True):
+                cant_azar = st.number_input("Cartones al azar", min_value=1, max_value=630, value=1)
+                if st.button("🎲 Asignar al Azar", use_container_width=True):
+                    disponibles = [n for n in range(1, 631) if n not in cartones_ocupados]
+                    if len(disponibles) < cant_azar:
+                        st.error(f"Solo quedan {len(disponibles)} libres.")
+                    else:
+                        seleccionados = sorted(random.sample(disponibles, cant_azar))
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), "Cliente Rápido", ", ".join(map(str, seleccionados)), cant_azar, "Pendiente por Cancelar", ""))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"¡Asignados {cant_azar} cartones!")
+                        st.rerun()
+                
+                st.markdown("---")
+                if st.button("🗑️ Borrar Todo", type="primary", use_container_width=True):
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                              (datetime.now().strftime("%Y-%m-%d %H:%M"), "Cliente Rápido", ", ".join(map(str, seleccionados)), cant_azar, "Pendiente por Cancelar", ""))
+                    c.execute("DELETE FROM ventas")
                     conn.commit()
                     conn.close()
-                    st.success(f"¡Asignados {cant_azar} cartones!")
+                    st.warning("Base de datos limpia.")
                     st.rerun()
-            
-            if st.button("🗑️ Borrar Todo", type="primary"):
-                conn = sqlite3.connect(DB_NAME)
-                c = conn.cursor()
-                c.execute("DELETE FROM ventas")
-                conn.commit()
-                conn.close()
-                st.warning("Base de datos limpia.")
-                st.rerun()
 
     st.divider()
 
