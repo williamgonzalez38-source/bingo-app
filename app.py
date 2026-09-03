@@ -60,7 +60,7 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen en base64 (disponibles en negro intenso/negrita; ocupados muy translúcidos)
+# Función para generar la imagen en base64 con números disponibles en negrita real y negro intenso
 def generar_imagen_base64(libres):
     cols = 15
     total_items = 630
@@ -80,8 +80,9 @@ def generar_imagen_base64(libres):
     try:
         font_title = ImageFont.truetype("arial.ttf", 22)
         font_subtitle = ImageFont.truetype("arial.ttf", 14)
-        font_grid_bold = ImageFont.truetype("arialbd.ttf", 14) # Negro intenso y negrita para disponibles
-        font_grid_normal = ImageFont.truetype("arial.ttf", 13)  # Translúcido para ocupados
+        # Forzamos arialbd.ttf para asegurar la negrita real en los disponibles
+        font_grid_bold = ImageFont.truetype("arialbd.ttf", 14) 
+        font_grid_normal = ImageFont.truetype("arial.ttf", 13)
     except:
         font_title = font_subtitle = font_grid_bold = font_grid_normal = ImageFont.load_default()
         
@@ -102,12 +103,12 @@ def generar_imagen_base64(libres):
         y2 = y1 + cell_h
         
         if n in libres:
-            # Libre: Fondo blanco, texto negro puro y negrita para destacar perfectamente en WhatsApp
-            draw.rectangle([x1, y1, x2, y2], fill="#FFFFFF", outline="#cbd5e1", width=1)
+            # Disponible: Fondo blanco, borde definido, texto en negro puro y fuente en negrita
+            draw.rectangle([x1, y1, x2, y2], fill="#FFFFFF", outline="#94a3b8", width=1)
             color_texto = "#000000"
             font_usada = font_grid_bold
         else:
-            # Ocupado: Fondo casi blanco/gris muy suave, texto muy tenue (translúcido)
+            # Ocupado: Fondo muy tenue y transparente/claro, texto gris translúcido
             draw.rectangle([x1, y1, x2, y2], fill="#f8fafc", outline="#e2e8f0", width=1)
             color_texto = "#cbd5e1"
             font_usada = font_grid_normal
