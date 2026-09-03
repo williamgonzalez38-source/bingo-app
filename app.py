@@ -37,7 +37,6 @@ st.markdown("""
     <style>
     .main { background-color: #0f172a; color: #f8fafc; }
     .stTextInput input, .stNumberInput input { background-color: #1e293b; color: white; border: 1px solid #334155; }
-    /* Ajustes compactos para la barra lateral fija */
     section[data-testid="stSidebar"] { background-color: #0b1120; }
     </style>
 """, unsafe_allow_html=True)
@@ -118,6 +117,28 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     conn.close()
                     st.success("¡Cliente registrado con éxito!")
                     st.rerun()
+
+        # Generador de texto para WhatsApp tras un registro manual exitoso o para redactar rápido
+        with st.container(border=True):
+            st.markdown("##### 💬 Generar Mensaje para WhatsApp")
+            col_w, col_btn_w = st.columns([3, 1])
+            with col_w:
+                cli_wpp_gen = st.text_input("Cliente para plantilla", placeholder="Nombre del jugador...", key="cli_gen_wpp")
+                nums_wpp_gen = st.text_input("Cartones asignados", placeholder="Ej: 12, 45, 100", key="nums_gen_wpp")
+            with col_btn_w:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("📋 Crear Plantilla", use_container_width=True):
+                    if cli_wpp_gen.strip() and nums_wpp_gen.strip():
+                        cant_c = len(re.findall(r"\b\d+\b", nums_wpp_gen))
+                        total_c = cant_c * precio_unitario
+                        mensaje_wpp = f"¡Hola {cli_wpp_gen.strip()}! 🎴 Tus cartones asignados son: {nums_wpp_gen.strip()} ({cant_c} unid.). Total a pagar: Bs. {total_c:,.2f}."
+                        st.session_state["mensaje_wpp_copiar"] = mensaje_wpp
+                    else:
+                        st.warning("Indica cliente y cartones.")
+
+            if "mensaje_wpp_copiar" in st.session_state and st.session_state["mensaje_wpp_copiar"]:
+                st.text_area("Copia el siguiente texto para WhatsApp:", value=st.session_state["mensaje_wpp_copiar"], height=80, key="txt_wpp_output")
+                st.info("💡 Haz clic dentro del recuadro de arriba, presiona Ctrl+A y Ctrl+C para copiarlo y pegarlo en WhatsApp.")
 
         st.divider()
 
