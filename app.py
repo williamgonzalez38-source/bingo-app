@@ -118,33 +118,29 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.success("¡Cliente registrado con éxito!")
                     st.rerun()
 
-        # Botón para simular formato visual de matriz (con caracteres de bloque/estilo en texto) para WhatsApp
+        # Botón para copiar números disponibles optimizado para WhatsApp sin errores de formato
         with st.container(border=True):
             col_disp_info, col_disp_btn = st.columns([3, 1])
             with col_disp_info:
-                st.markdown("##### 📋 Copiar Números Disponibles (Formato Visual)")
-                st.caption("Genera una cuadrícula visual compacta con números en negrita para copiar y pegar fácilmente en WhatsApp.")
+                st.markdown("##### 📋 Copiar Números Disponibles para WhatsApp")
+                st.caption("Genera los números libres en bloques limpios con negrita (*), listos para enviar sin errores.")
             with col_disp_btn:
-                if st.button("📋 Copiar Cuadrícula", use_container_width=True):
-                    # Generamos un formato tipo bloque compacto con dígitos en negrita matemática de WhatsApp (* o caracteres especiales)
-                    # En WhatsApp las negritas se hacen con asteriscos (*texto*). 
-                    # Agrupamos de a 10 u 18 números por línea simulando la matriz visual.
+                if st.button("📋 Copiar Libres", use_container_width=True):
                     libres = [n for n in range(1, 631) if n not in cartones_ocupados]
                     
-                    # Convertimos cada número con asteriscos para negrita en WhatsApp
+                    # Estructura compacta y segura para chat de WhatsApp
                     lineas_matriz = []
-                    chunk_size = 10  # 10 por línea para que luzca ordenado en chat de WhatsApp
+                    chunk_size = 12  # 12 números por línea para que se vea compacto
                     for i in range(0, len(libres), chunk_size):
                         bloque = libres[i:i + chunk_size]
-                        # Formato limpio con negritas de WhatsApp
                         linea_str = " ".join([f"*{n}*" for n in bloque])
                         lineas_matriz.append(linea_str)
                     
-                    header_wpp = f"🎴 *CARTONES DISPONIBLES ({len(libres)} libres)* 🎴\n" + "―" * 25 + "\n"
+                    header_wpp = f"🎴 *CARTONES DISPONIBLES* 🎴\n*(Total libres: {len(libres)})*\n" + "―" * 20 + "\n"
                     st.session_state["texto_cuadricula_wpp"] = header_wpp + "\n".join(lineas_matriz)
 
             if "texto_cuadricula_wpp" in st.session_state and st.session_state["texto_cuadricula_wpp"]:
-                st.text_area("Cuadrícula lista para WhatsApp (copia este texto):", value=st.session_state["texto_cuadricula_wpp"], height=120, key="txt_cuadricula_output")
+                st.text_area("Texto listo para WhatsApp (copia este cuadro):", value=st.session_state["texto_cuadricula_wpp"], height=120, key="txt_cuadricula_output")
 
         st.divider()
 
