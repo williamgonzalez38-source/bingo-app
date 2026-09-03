@@ -68,15 +68,15 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen con números GIGANTES reales para WhatsApp
+# Función para generar la imagen exactamente con 20 números de ancho y proporciones maximizadas
 def generar_imagen_base64(libres):
-    cols = 10  # Solo 10 columnas para que las celdas sean masivas y los números se vean enormes en WhatsApp
+    cols = 20  # Exactamente 20 números de ancho por fila
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    cell_w = 110  # Celdas muy anchas
-    cell_h = 75   # Celdas muy altas
-    margin = 40
+    cell_w = 85   # Ancho proporcional para celdas grandes
+    cell_h = 65   # Alto de celda espacioso
+    margin = 35
     header_h = 100
     
     img_w = (cols * cell_w) + (margin * 2)
@@ -88,15 +88,15 @@ def generar_imagen_base64(libres):
     
     try:
         font_title = ImageFont.truetype("arial.ttf", 24)
-        font_subtitle = ImageFont.truetype("arial.ttf", 16)
-        # 🎴 FUENTE MASIVA DE 48 PT EN NEGRITA PARA QUE SE VEAN GIGANTES EN WHATSAPP
-        font_grid_bold = ImageFont.truetype("arialbd.ttf", 48) 
+        font_subtitle = ImageFont.truetype("arial.ttf", 15)
+        # 🎴 FUENTE GRANDE DE 38 PT EN NEGRITA PARA 20 COLUMNAS
+        font_grid_bold = ImageFont.truetype("arialbd.ttf", 38) 
     except:
         font_title = font_subtitle = font_grid_bold = ImageFont.load_default()
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 60), f"Disponibles: {len(libres)} / 630  |  Visualización en tamaño gigante real", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 60), f"Disponibles: {len(libres)} / 630  |  Diseño de 20 columnas", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -109,7 +109,7 @@ def generar_imagen_base64(libres):
         y1 = start_y + (r * cell_h)
         
         if n in libres:
-            # Disponible: Número gigantesco en negro puro (#000000) centrado con precisión
+            # Disponible: Número grande en negro puro (#000000) centrado con precisión
             text = str(n)
             bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
             tw = bbox[2] - bbox[0]
@@ -411,7 +411,7 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
     st.caption("🟢 Verde: Libre  |  🔴 Rojo: Ocupado")
     
-    cols_por_fila = 18
+    cols_por_fila = 20
     for i in range(0, 630, cols_por_fila):
         cols = st.columns(cols_por_fila)
         for j in range(cols_por_fila):
