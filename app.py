@@ -3,8 +3,10 @@ import sqlite3
 import random
 from datetime import datetime
 import io
+import base64
 from PIL import Image, ImageDraw, ImageFont
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Configuración de página web ancha y moderna
 st.set_page_config(
@@ -58,14 +60,12 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen PNG en cuadrícula (fondo blanco, números en negro)
-def generar_imagen_cartones_libres(libres):
-    # Definimos la estructura de la cuadrícula (ej. 15 columnas)
+# Función para generar la imagen en base64 para copiar directamente al portapapeles con un botón web
+def generar_imagen_base64(libres):
     cols = 15
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    # Dimensiones de cada celda y márgenes
     cell_w = 48
     cell_h = 36
     margin = 30
@@ -74,24 +74,20 @@ def generar_imagen_cartones_libres(libres):
     img_w = (cols * cell_w) + (margin * 2)
     img_h = (rows * cell_h) + (margin * 2) + header_h
     
-    # Crear imagen con fondo blanco
     img = Image.new("RGB", (img_w, img_h), color="#FFFFFF")
     draw = ImageDraw.Draw(img)
     
-    # Intentar cargar una fuente estándar, si no usa la predeterminada
     try:
         font_title = ImageFont.truetype("arial.ttf", 22)
         font_subtitle = ImageFont.truetype("arial.ttf", 14)
-        font_grid = ImageFont.truetype("arialbd.ttf", 13) # Negrita para los números
+        font_grid = ImageFont.truetype("arialbd.ttf", 13)
     except:
         font_title = font_subtitle = font_grid = ImageFont.load_default()
         
-    # Dibujar cabecera
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
     draw.text((margin, 55), f"Disponibles: {len(libres)} / 630  |  Fondo Blanco / Números Negros", fill="#94a3b8", font=font_subtitle)
     
-    # Dibujar cuadrícula de los 630 cartones
     start_x = margin
     start_y = header_h + margin
     
@@ -105,17 +101,13 @@ def generar_imagen_cartones_libres(libres):
         y2 = y1 + cell_h
         
         if n in libres:
-            # Libre: Fondo blanco con borde sutil y número negro en negrita
             draw.rectangle([x1, y1, x2, y2], fill="#FFFFFF", outline="#cbd5e1", width=1)
             color_texto = "#000000"
         else:
-            # Ocupado: Fondo gris claro / tachado visual para distinguirlo en la imagen
             draw.rectangle([x1, y1, x2, y2], fill="#f1f5f9", outline="#e2e8f0", width=1)
             color_texto = "#cbd5e1"
             
-        # Centrar el número en la celda
         text = str(n)
-        # Usamos textlength o aproximación para centrar
         bbox = draw.textbbox((0, 0), text, font=font_grid)
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
@@ -124,11 +116,10 @@ def generar_imagen_cartones_libres(libres):
         
         draw.text((tx, ty), text, fill=color_texto, font=font_grid)
         
-    # Guardar en bytes para descargar
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
-    return buf
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 # Menú lateral fijo en la barra lateral con opciones una debajo de otra (sin desplegables)
 with st.sidebar:
@@ -152,7 +143,7 @@ with st.sidebar:
 
 menu_seleccionado = st.session_state["menu_activo"]
 
-# Cabecera superior: Buscador, Precio y el botón compacto de descarga de imagen al lado
+# Cabecera superior: Buscador, Precio y el botón compacto para copiar imagen al portapapeles con 1 clic
 st.markdown("### 🎴 Control de Jugadores y Cartones")
 
 col_head1, col_head2, col_head3, col_head4 = st.columns([2.2, 1.2, 1.2, 1.4])
@@ -162,15 +153,61 @@ with col_head3:
     precio_unitario = st.number_input("💲 Precio:", min_value=1.0, value=350.0, step=10.0, label_visibility="collapsed")
 with col_head4:
     libres_actuales = [n for n in range(1, 631) if n not in cartones_ocupados]
-    img_buffer = generar_imagen_cartones_libres(cartones_ocupados)
+    img_b64 = generar_imagen_base64(cartones_ocupados)
     
-    st.download_button(
-        label="📥 Descargar Imagen de Disponibles",
-        data=img_buffer,
-        file_name="cartones_disponibles.png",
-        mime="image/png",
-        use_container_width=True
-    )
+    # Componente web HTML/JS integrado para copiar la imagen directamente al portapapeles y pegarla directo en WhatsApp (Ctrl+V)
+    components.html(f"""
+    <div style="margin: 0; padding: 0;">
+        <button id="btnCopiarImg" onclick="copiarImagen()" style="
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            text-align: center;
+            font-family: sans-serif;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            transition: background 0.2s;
+        ">📋 Copiar Imagen</button>
+        <p id="msgEstado" style="font-size: 10px; color: #94a3b8; text-align: center; margin: 4px 0 0 0; font-family: sans-serif;"></p>
+    </div>
+
+    <script>
+    async function copiarImagen() {{
+        const btn = document.getElementById('btnCopiarImg');
+        const msg = document.getElementById('msgEstado');
+        
+        try {{
+            const base64Data = "{img_b64}";
+            const res = await fetch(`data:image/png;base64,${{base64Data}}`);
+            const blob = await res.blob();
+            
+            await navigator.clipboard.write([
+                new ClipboardItem({{ 'image/png': blob }])
+            ]);
+            
+            btn.style.backgroundColor = '#16a34a';
+            btn.innerText = '¡Copiada con éxito!';
+            msg.innerText = '¡Ya puedes ir a WhatsApp y presionar Ctrl + V!';
+            
+            setTimeout(() => {{
+                btn.style.backgroundColor = '#2563eb';
+                btn.innerText = '📋 Copiar Imagen';
+                msg.innerText = '';
+            }}, 3500);
+        }} catch (err) {{
+            console.error(err);
+            btn.style.backgroundColor = '#dc2626';
+            btn.innerText = 'Error al copiar';
+            msg.innerText = 'Intenta usar un navegador compatible (Chrome/Edge)';
+        }}
+    }}
+    </script>
+    """, height=65)
 
 if menu_seleccionado == "📊 Resumen General":
     st.markdown("#### Resumen General de la Partida")
