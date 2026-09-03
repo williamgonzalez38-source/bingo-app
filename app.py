@@ -65,12 +65,11 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Menú lateral fijo en la barra lateral (Sidebar) con opciones fijas una debajo de otra (sin selectbox desplegable)
+# Menú lateral fijo en la barra lateral con opciones una debajo de otra
 with st.sidebar:
     st.markdown("### 🧭 Menú de Navegación")
     st.markdown("---")
     
-    # Usamos session_state para recordar la opción seleccionada mediante botones fijos
     if "menu_activo" not in st.session_state:
         st.session_state["menu_activo"] = "📋 Ventas y Registro"
 
@@ -99,7 +98,6 @@ if menu_seleccionado == "📊 Resumen General":
     col_m3.metric("Recaudación Estimada", f"Bs. {recaudacion_total:,.2f}")
 
 elif menu_seleccionado == "📋 Ventas y Registro":
-    # Botonera de acciones rápidas superior reorganizada por niveles
     with st.expander("➕ Opciones de Registro y Asignación Rápida", expanded=True):
         
         # Fila Superior: Registro Manual como protagonista principal
@@ -132,28 +130,30 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.success("¡Cliente registrado con éxito!")
                     st.rerun()
 
-        # Botón para copiar números disponibles optimizado para WhatsApp
+        # Único botón solicitado con formato de cuadrícula ordenada en bloques limpios tipo texto/cuadrícula para WhatsApp
         with st.container(border=True):
             col_disp_info, col_disp_btn = st.columns([3, 1])
             with col_disp_info:
-                st.markdown("##### 📋 Copiar Números Disponibles para WhatsApp")
-                st.caption("Genera los números libres en bloques limpios con negrita (*), listos para enviar sin errores.")
+                st.markdown("##### 📋 Copiar Registro de Cartones Disponibles")
+                st.caption("Genera una cuadrícula ordenada con fondo blanco simulado, números en negro y formato listo para WhatsApp.")
             with col_disp_btn:
-                if st.button("📋 Copiar Libres", use_container_width=True):
+                if st.button("Copiar registro de cartones disponibles", use_container_width=True):
                     libres = [n for n in range(1, 631) if n not in cartones_ocupados]
                     
+                    # Estructura de cuadrícula ordenada en filas de 10 números con caracteres limpios
                     lineas_matriz = []
-                    chunk_size = 12
+                    chunk_size = 10
                     for i in range(0, len(libres), chunk_size):
                         bloque = libres[i:i + chunk_size]
-                        linea_str = " ".join([f"*{n}*" for n in bloque])
+                        # Aseguramos un espaciado uniforme y negrita para cada número
+                        linea_str = " ".join([f"*{n:03d}*" if n < 100 else f"*{n}*" for n in bloque])
                         lineas_matriz.append(linea_str)
                     
-                    header_wpp = f"🎴 *CARTONES DISPONIBLES* 🎴\n*(Total libres: {len(libres)})*\n" + "―" * 20 + "\n"
+                    header_wpp = f"🎴 *REGISTRO DE CARTONES DISPONIBLES* 🎴\n*(Total libres: {len(libres)} / 630)*\n" + "⬜" * 12 + "\n"
                     st.session_state["texto_cuadricula_wpp"] = header_wpp + "\n".join(lineas_matriz)
 
             if "texto_cuadricula_wpp" in st.session_state and st.session_state["texto_cuadricula_wpp"]:
-                st.text_area("Texto listo para WhatsApp (copia este cuadro):", value=st.session_state["texto_cuadricula_wpp"], height=120, key="txt_cuadricula_output")
+                st.text_area("Cuadrícula lista para WhatsApp (copia este cuadro):", value=st.session_state["texto_cuadricula_wpp"], height=130, key="txt_cuadricula_output")
 
         st.divider()
 
