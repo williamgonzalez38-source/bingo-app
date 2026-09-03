@@ -83,13 +83,12 @@ def obtener_fuente(size):
             continue
     return ImageFont.load_default()
 
-# Función para generar la imagen exactamente igual a tu nueva referencia (texto continuo sin cuadros)
+# Función para generar la imagen con números ocupados más claros (efecto semitransparente/atenuado)
 def generar_imagen_base64(libres):
     cols = 20  # 20 columnas exactas por fila
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    # Parámetros de espaciado limpio idénticos a la referencia
     col_w = 42    
     row_h = 28    
     margin_x = 25
@@ -104,7 +103,7 @@ def generar_imagen_base64(libres):
     draw = ImageDraw.Draw(img)
     
     font_title = obtener_fuente(20)
-    font_grid = obtener_fuente(16) # Tamaño de número idéntico y unificado para todos
+    font_grid = obtener_fuente(16) # Mantiene el mismo tamaño exacto para todos
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin_x, 15), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
@@ -125,8 +124,8 @@ def generar_imagen_base64(libres):
             # Disponibles: Color negro puro y nítido
             draw.text((x, y), text, fill="#000000", font=font_grid)
         else:
-            # Ocupados: Tono gris claro exacto al de la referencia
-            draw.text((x, y), text, fill="#cbd5e1", font=font_grid)
+            # No disponibles: Tono gris mucho más claro y translúcido (#e2e8f0)
+            draw.text((x, y), text, fill="#e2e8f0", font=font_grid)
         
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -415,9 +414,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
 elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
-    st.caption("✨ Vista previa idéntica a tu imagen de referencia (texto continuo y limpio)")
+    st.caption("✨ Vista previa con números ocupados en tono translúcido/atenuado")
     
-    # Matriz visual en pantalla replicando el mismo estilo exacto de la referencia
+    # Matriz visual en pantalla replicando el mismo estilo exacto con ocupados más claros
     html_matriz = """
     <div style="background-color: #ffffff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; overflow-x: auto;">
         <div style="display: grid; grid-template-columns: repeat(20, minmax(36px, 1fr)); gap: 6px; text-align: left;">
@@ -430,7 +429,7 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
                 font-family: Arial, sans-serif;
                 font-weight: bold;
                 font-size: 14px;
-                color: #cbd5e1;
+                color: #e2e8f0;
                 padding: 4px 0;
             ">{num}</div>
             """
