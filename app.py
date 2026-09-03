@@ -37,9 +37,6 @@ st.markdown("""
     <style>
     .main { background-color: #0f172a; color: #f8fafc; }
     .stTextInput input, .stNumberInput input { background-color: #1e293b; color: white; border: 1px solid #334155; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-    .stTabs [data-baseweb="tab"] { background-color: #1e293b; color: #94a3b8; border-radius: 4px; padding: 8px 16px; font-weight: bold; }
-    .stTabs [aria-selected="true"] { background-color: #0284c7 !important; color: white !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -67,10 +64,16 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Pestañas principales
-tab_resumen, tab_ventas, tab_disp = st.tabs(["📊 Resumen General", "📋 Ventas y Registro", "🎟️ Matriz de Disponibles (1-630)"])
+# Menú de navegación en la barra lateral desplegable
+with st.sidebar:
+    st.markdown("### 🧭 Menú Principal")
+    menu_seleccionado = st.radio(
+        "Seleccione una opción:",
+        ["📊 Resumen General", "📋 Ventas y Registro", "🎟️ Matriz de Disponibles (1-630)"],
+        label_visibility="collapsed"
+    )
 
-with tab_resumen:
+if menu_seleccionado == "📊 Resumen General":
     st.markdown("#### Resumen General de la Partida")
     tot_cartones_vendidos = len(cartones_ocupados)
     recaudacion_total = tot_cartones_vendidos * precio_unitario
@@ -80,7 +83,7 @@ with tab_resumen:
     col_m2.metric("Cartones Libres", f"{630 - tot_cartones_vendidos}")
     col_m3.metric("Recaudación Estimada", f"Bs. {recaudacion_total:,.2f}")
 
-with tab_ventas:
+elif menu_seleccionado == "📋 Ventas y Registro":
     # Botonera de acciones rápidas superior
     with st.expander("➕ Opciones de Registro y Asignación Rápida", expanded=True):
         col_btn1, col_btn2, col_btn3 = st.columns(3)
@@ -260,7 +263,7 @@ with tab_ventas:
                     conn.close()
                     st.rerun()
 
-with tab_disp:
+elif menu_seleccionado == "🎟️ Matriz de Disponibles (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
     st.caption("🟢 Verde: Libre  |  🔴 Rojo: Ocupado")
     
