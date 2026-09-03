@@ -281,6 +281,11 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         
         with col_inf1:
             st.markdown("##### 📥 Importar Directo desde WhatsApp")
+            
+            # Inicializar la clave en session_state si no existe
+            if "input_texto_wpp" not in st.session_state:
+                st.session_state["input_texto_wpp"] = ""
+
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
                     "Pega aquí todo lo resaltado en WhatsApp", 
@@ -316,15 +321,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                         if len(lineas) >= 1:
                             posible_nombre = lineas[0]
-                            # Limpiar marcas de hora, números telefónicos largos o códigos iniciales de la cabecera copiada
                             posible_nombre = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', posible_nombre).strip()
-                            posible_nombre = re.sub(r'^\+?[\d\s\-\(\)]+', '', posible_nombre).strip() # Limpiar número de teléfono si aparece al inicio
+                            posible_nombre = re.sub(r'^\+?[\d\s\-\(\)]+', '', posible_nombre).strip()
                             
-                            # Si la primera línea es válida y no es una cifra numérica pura
                             if posible_nombre and not posible_nombre.isdigit() and len(posible_nombre) > 1:
                                 nombre_cliente = posible_nombre
                             elif len(lineas) > 1:
-                                # Si la primera línea era solo una hora o número, revisar la segunda línea
                                 posible_nombre_2 = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', lineas[1]).strip()
                                 posible_nombre_2 = re.sub(r'^\+?[\d\s\-\(\)]+', '', posible_nombre_2).strip()
                                 if posible_nombre_2 and not posible_nombre_2.isdigit() and len(posible_nombre_2) > 1:
@@ -379,6 +381,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                       (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, nums_wpp)), len(nums_wpp), estado_reg, ref_wpp))
                             conn.commit()
                             conn.close()
+                            
+                            # Limpiar estado correctamente después de procesar con éxito
+                            st.session_state["input_texto_wpp"] = ""
                             st.success(f"¡Registrado! Contacto: {nombre_cliente} | Cartones: {len(nums_wpp)}")
                             st.rerun()
 
