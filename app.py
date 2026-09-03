@@ -85,7 +85,7 @@ def obtener_fuente(size):
 
 # Función para generar la imagen con 20 columnas y números máximos del tamaño de la celda
 def generar_imagen_base64(libres):
-    cols = 20  # Mantenemos las 20 columnas exactas
+    cols = 20  # 20 columnas exactas
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
@@ -142,7 +142,7 @@ def generar_imagen_base64(libres):
             # Número en negro puro y negrita máxima
             draw.text((tx, ty), text, fill="#000000", font=font_grid_bold)
         else:
-            # Ocupado: Celda totalmente en blanco o tachada sutilmente
+            # Ocupado: Celda totalmente en blanco
             pass
         
     buf = io.BytesIO()
@@ -172,7 +172,7 @@ with st.sidebar:
 
 menu_seleccionado = st.session_state["menu_activo"]
 
-# Cabecera superior: Buscador, Precio y el botón compacto para copiar imagen al portapapeles con 1 clic
+# Cabecera superior: Buscador, Precio y el botón funcional para copiar imagen al portapapeles con 1 clic
 st.markdown("### 🎴 Control de Jugadores y Cartones")
 
 col_head1, col_head2, col_head3, col_head4 = st.columns([2.2, 1.2, 1.2, 1.4])
@@ -227,7 +227,7 @@ with col_head4:
                 btn.innerText = '📋 Copiar Imagen';
                 msg.innerText = '';
             }, 3500);
-        } id_err => {
+        } catch (err) {
             console.error(err);
             btn.style.backgroundColor = '#dc2626';
             btn.innerText = 'Error al copiar';
@@ -432,9 +432,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
 elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
-    st.caption("✨ Visualización idéntica a la imagen generada para WhatsApp (Números grandes y legibles)")
+    st.caption("✨ Visualización interactiva con números grandes y legibles (Idéntica a la imagen para WhatsApp)")
     
-    # 💥 VISTA PREVIA INTERACTIVA CON ESTILO VISUAL IDÉNTICO A LA IMAGEN GENERADA
+    # Matriz interactiva en pantalla con el mismo diseño visual de números gigantes
     html_matriz = """
     <div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; overflow-x: auto;">
         <div style="display: grid; grid-template-columns: repeat(20, minmax(42px, 1fr)); gap: 4px;">
@@ -442,7 +442,6 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
     
     for num in range(1, 631):
         if num in cartones_ocupados:
-            # Ocupado: celdas sutiles o en blanco tal como en la imagen de WhatsApp
             html_matriz += f"""
             <div style="
                 background-color: #f1f5f9;
@@ -458,7 +457,6 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
             ">{num}</div>
             """
         else:
-            # Libre: Cuadros limpios con números gigantes y negrita absoluta idénticos al reporte copiado
             html_matriz += f"""
             <div style="
                 background-color: #f8fafc;
