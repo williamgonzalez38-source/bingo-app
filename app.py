@@ -284,9 +284,19 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
                     "Pega aquí todo lo resaltado en WhatsApp", 
-                    placeholder="Pega aquí (Nombre del contacto arriba + mensaje abajo)..."
+                    placeholder="Pega aquí (Nombre del contacto arriba + mensaje abajo)...",
+                    key="input_texto_wpp"
                 )
-                btn_wpp = st.form_submit_button("Procesar y Registrar")
+                
+                col_btn_w1, col_btn_w2 = st.columns(2)
+                with col_btn_w1:
+                    btn_wpp = st.form_submit_button("Procesar y Registrar", use_container_width=True)
+                with col_btn_w2:
+                    btn_borrar_wpp = st.form_submit_button("🗑️ Borrar", use_container_width=True)
+                
+                if btn_borrar_wpp:
+                    st.session_state["input_texto_wpp"] = ""
+                    st.rerun()
                 
                 if btn_wpp:
                     if not texto_wpp_unificado.strip():
@@ -297,49 +307,81 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         for l in lineas_crudas:
                             l_limpia = l.strip()
                             if l_limpia:
-                                # Filtrar líneas que contengan únicamente marcas de hora comunes en chats
                                 if not re.fullmatch(r'[\d:\s]+(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l_limpia, re.IGNORECASE):
                                     lineas.append(l_limpia)
 
                         nombre_cliente = "Cliente WhatsApp"
                         cuerpo_busqueda = texto_wpp_unificado
 
-                        # Extracción precisa del contacto incluso con un solo mensaje seleccionado
                         if len(lineas) >= 1:
                             posible_nombre = lineas[0]
-                            # Limpiar corchetes de hora si los hay al inicio
                             posible_nombre = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', posible_nombre).strip()
                             if posible_nombre and not posible_nombre.isdigit():
                                 nombre_cliente = posible_nombre
                             if len(lineas) > 1:
                                 cuerpo_busqueda = " ".join(lineas[1:])
 
+                        # Detectar si el usuario está pidiendo cartones al azar (ej: "dame 3", "quiero 5 al azar", "5", etc.)
+                        # Buscamos números explícitos de cartones en el texto
                         nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_busqueda) if 1 <= int(n) <= 630]
-                        if not nums_wpp:
-                            nums_wpp = [n for n in re.findall(r"\b\d+\b", texto_wpp_unificado) if 1 <= int(n) <= 630]
+                        
+                        # Verificamos si el texto indica que quiere una cantidad específica al azar o si los números encontrados no son cartones específicos sino una cantidad solicitada
+                        texto_lower = cuerpo_busqueda.lower()
+                        pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname"]) or len(nums_wpp) <= 2 and any(c in texto_lower for c in ["carton", "cartones", "anotame", "inscribeme"])
 
-                        ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp_unificado)
-                        ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
+                        # Si el cliente pide una cantidad específica (por ejemplo "dame 3" o "5 cartones") y no listó números largos de cartones específicos:
+                        cantidad_solicitada = 0
+                        if pide_azar or len(nums_wpp) == 1 and int(nums_wpp[0]) <= 50: # Si menciona un número menor o igual a 50 junto a palabras de petición
+                            # Intentar extraer el número que representa la cantidad
+                            for palabra in re.findall(r'\b\d+\b', cuerpo_busqueda):
+                                val_num = int(palabra)
+                                if val_num <= 100: # Cantidad lógica razonable de cartones que pide un jugador
+                                    cantidad_solicitada = val_num
+                                    break
+
+                        if cantidad_solicitada > 0 and (len(nums_wpp) <= 1 or pide_azar):
+                            # Asignación automática al azar de la cantidad solicitada consultando disponibles reales
+                            conn_tmp = sqlite3.connect(DB_NAME)
+                            c_tmp = conn_tmp.cursor()
+                            c_tmp.execute("SELECT numeros FROM ventas")
+                            filas_actuales = c_tmp.fetchall()
+                            conn_tmp.close()
+                            
+                            ocupados_actuales = set()
+                            for f_nums, in filas_actuales:
+                                for n in re.findall(r"\b\d+\b", f_nums):
+                                    ocupados_actuales.add(int(n))
+                            
+                            disponibles_reales = [n for n in range(1, 631) if n not in ocupados_actuales]
+                            
+                            if len(disponibles_reales) < cantidad_solicitada:
+                                st.error(f"El cliente pide {cantidad_solicitada} cartones, pero solo quedan {len(disponibles_reales)} libres.")
+                            else:
+                                nums_wpp = sorted(random.sample(disponibles_reales, cantidad_solicitada))
 
                         if not nums_wpp:
-                            st.error("No se detectaron cartones válidos (1-630) en el texto pegado.")
+                            st.error("No se detectaron cartones válidos (1-630) ni cantidad solicitada en el texto pegado.")
                         else:
+                            # Asegurar que sean enteros válidos dentro del rango de cartones
+                            nums_wpp = [n for n in nums_wpp if 1 <= int(n) <= 630]
+                            ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp_unificado)
+                            ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
+
                             estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                             conn = sqlite3.connect(DB_NAME)
                             c = conn.cursor()
                             c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
+                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, nums_wpp)), len(nums_wpp), estado_reg, ref_wpp))
                             conn.commit()
                             conn.close()
                             st.success(f"¡Registrado! Contacto: {nombre_cliente} | Cartones: {len(nums_wpp)}")
                             st.rerun()
 
         with col_inf2:
-            st.markdown("##### 🎲 Al Azar y 🗑️ Borrar")
+            st.markdown("##### 🎲 Al Azar Manual y 🗑️ Borrar Base")
             with st.container(border=True):
                 cant_azar = st.number_input("Cartones al azar", min_value=1, max_value=630, value=1)
                 if st.button("🎲 Asignar al Azar", use_container_width=True):
-                    # Consultar en tiempo real los cartones ocupados actuales para garantizar disponibilidad real
                     conn_tmp = sqlite3.connect(DB_NAME)
                     c_tmp = conn_tmp.cursor()
                     c_tmp.execute("SELECT numeros FROM ventas")
@@ -359,7 +401,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         seleccionados = sorted(random.sample(disponibles_reales, cant_azar))
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
-                        # Inserción directa e independiente sin alterar los demás registros
                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), "Cliente Rápido", ", ".join(map(str, seleccionados)), cant_azar, "Pendiente por Cancelar", ""))
                         conn.commit()
@@ -368,7 +409,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         st.rerun()
                 
                 st.markdown("---")
-                if st.button("🗑️ Borrar Todo", type="primary", use_container_width=True):
+                if st.button("🗑️ Borrar Toda la Base", type="primary", use_container_width=True):
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
                     c.execute("DELETE FROM ventas")
@@ -445,7 +486,6 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
     st.caption("✨ Vista previa con números ocupados en tono translúcido/atenuado")
     
-    # Matriz visual en pantalla replicando el mismo estilo exacto con ocupados más claros
     html_matriz = """
     <div style="background-color: #ffffff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; overflow-x: auto;">
         <div style="display: grid; grid-template-columns: repeat(20, minmax(36px, 1fr)); gap: 6px; text-align: left;">
