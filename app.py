@@ -118,20 +118,33 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.success("¡Cliente registrado con éxito!")
                     st.rerun()
 
-        # Botón para copiar números disponibles para la venta
+        # Botón para simular formato visual de matriz (con caracteres de bloque/estilo en texto) para WhatsApp
         with st.container(border=True):
             col_disp_info, col_disp_btn = st.columns([3, 1])
             with col_disp_info:
-                st.markdown("##### 📋 Copiar Números Disponibles")
-                st.caption("Genera la lista de todos los cartones libres actuales listos para pegar en WhatsApp.")
+                st.markdown("##### 📋 Copiar Números Disponibles (Formato Visual)")
+                st.caption("Genera una cuadrícula visual compacta con números en negrita para copiar y pegar fácilmente en WhatsApp.")
             with col_disp_btn:
-                if st.button("📋 Copiar Libres", use_container_width=True):
-                    libres = [str(n) for n in range(1, 631) if n not in cartones_ocupados]
-                    texto_libres = ", ".join(libres)
-                    st.session_state["texto_libres_copiar"] = texto_libres
+                if st.button("📋 Copiar Cuadrícula", use_container_width=True):
+                    # Generamos un formato tipo bloque compacto con dígitos en negrita matemática de WhatsApp (* o caracteres especiales)
+                    # En WhatsApp las negritas se hacen con asteriscos (*texto*). 
+                    # Agrupamos de a 10 u 18 números por línea simulando la matriz visual.
+                    libres = [n for n in range(1, 631) if n not in cartones_ocupados]
+                    
+                    # Convertimos cada número con asteriscos para negrita en WhatsApp
+                    lineas_matriz = []
+                    chunk_size = 10  # 10 por línea para que luzca ordenado en chat de WhatsApp
+                    for i in range(0, len(libres), chunk_size):
+                        bloque = libres[i:i + chunk_size]
+                        # Formato limpio con negritas de WhatsApp
+                        linea_str = " ".join([f"*{n}*" for n in bloque])
+                        lineas_matriz.append(linea_str)
+                    
+                    header_wpp = f"🎴 *CARTONES DISPONIBLES ({len(libres)} libres)* 🎴\n" + "―" * 25 + "\n"
+                    st.session_state["texto_cuadricula_wpp"] = header_wpp + "\n".join(lineas_matriz)
 
-            if "texto_libres_copiar" in st.session_state and st.session_state["texto_libres_copiar"]:
-                st.text_area("Cartones disponibles (copia este texto):", value=st.session_state["texto_libres_copiar"], height=80, key="txt_libres_output")
+            if "texto_cuadricula_wpp" in st.session_state and st.session_state["texto_cuadricula_wpp"]:
+                st.text_area("Cuadrícula lista para WhatsApp (copia este texto):", value=st.session_state["texto_cuadricula_wpp"], height=120, key="txt_cuadricula_output")
 
         st.divider()
 
@@ -290,8 +303,6 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
             if num <= 630:
                 with cols[j]:
                     if num in cartones_ocupados:
-                        # Ocupado: Fondo rojo oscuro, texto blanco en negrilla, más compacto
                         st.markdown(f"<div style='background-color:#991b1b; color:#ffffff; text-align:center; padding:2px 0px; margin:1px 0px; border-radius:2px; font-weight:bold; font-size:11px; line-height:1.2;'>{num}</div>", unsafe_allow_html=True)
                     else:
-                        # Libre: Fondo blanco, texto negro en negrilla, más compacto
                         st.markdown(f"<div style='background-color:#ffffff; color:#0f172a; text-align:center; padding:2px 0px; margin:1px 0px; border-radius:2px; font-weight:bold; font-size:11px; line-height:1.2;'>{num}</div>", unsafe_allow_html=True)
