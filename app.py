@@ -68,7 +68,7 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen en base64 sin líneas de cuadrícula: solo números negros (disponibles) sobre fondo totalmente limpio
+# Función para generar la imagen en base64 sin líneas de cuadrícula y con números negros extra intensos/gruesos (arialbd.ttf a mayor tamaño)
 def generar_imagen_base64(libres):
     cols = 15
     total_items = 630
@@ -89,7 +89,8 @@ def generar_imagen_base64(libres):
     try:
         font_title = ImageFont.truetype("arial.ttf", 22)
         font_subtitle = ImageFont.truetype("arial.ttf", 14)
-        font_grid_bold = ImageFont.truetype("arialbd.ttf", 14) 
+        # Usamos negrita real y un tamaño ligeramente mayor para mayor impacto visual
+        font_grid_bold = ImageFont.truetype("arialbd.ttf", 15) 
     except:
         font_title = font_subtitle = font_grid_bold = ImageFont.load_default()
         
@@ -108,7 +109,7 @@ def generar_imagen_base64(libres):
         y1 = start_y + (r * cell_h)
         
         if n in libres:
-            # Disponible: Dibujamos únicamente el número en negro negrita, sin bordes ni rayas de fondo
+            # Disponible: Dibujamos el número en negro puro (#000000) con negrita fuerte y mejor visibilidad
             text = str(n)
             bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
             tw = bbox[2] - bbox[0]
