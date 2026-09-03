@@ -290,6 +290,8 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
             if num <= 630:
                 with cols[j]:
                     if num in cartones_ocupados:
-                        st.markdown(f"<div style='background-color:#b91c1c; color:white; text-align:center; padding:4px; border-radius:3px; font-weight:bold; font-size:11px;'>{num}</div>", unsafe_allow_html=True)
+                        # Ocupado: Fondo rojo oscuro, texto blanco en negrilla, más compacto
+                        st.markdown(f"<div style='background-color:#991b1b; color:#ffffff; text-align:center; padding:2px 0px; margin:1px 0px; border-radius:2px; font-weight:bold; font-size:11px; line-height:1.2;'>{num}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div style='background-color:#166534; color:white; text-align:center; padding:4px; border-radius:3px; font-weight:bold; font-size:11px;'>{num}</div>", unsafe_allow_html=True)
+                        # Libre: Fondo blanco, texto negro en negrilla, más compacto
+                        st.markdown(f"<div style='background-color:#ffffff; color:#0f172a; text-align:center; padding:2px 0px; margin:1px 0px; border-radius:2px; font-weight:bold; font-size:11px; line-height:1.2;'>{num}</div>", unsafe_allow_html=True)
