@@ -36,7 +36,7 @@ def init_db():
 
 init_db()
 
-# Estilos CSS personalizados para mantener el tono oscuro y reducir el tamaño de los botones del menú
+# Estilos CSS personalizados para destacar visualmente el campo de cartones al editar
 st.markdown("""
     <style>
     .main { background-color: #0f172a; color: #f8fafc; }
@@ -68,7 +68,7 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen en base64 con números disponibles en negrita real y negro intenso
+# Función para generar la imagen en base64: disponibles en negrita/negro y ocupados totalmente transparentes (vacíos)
 def generar_imagen_base64(libres):
     cols = 15
     total_items = 630
@@ -95,7 +95,7 @@ def generar_imagen_base64(libres):
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 55), f"Disponibles: {len(libres)} / 630  |  Fondo Blanco / Números Negros", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 55), f"Disponibles: {len(libres)} / 630  |  Fondo Blanco / Ocupados Transparentes", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -110,22 +110,22 @@ def generar_imagen_base64(libres):
         y2 = y1 + cell_h
         
         if n in libres:
+            # Disponible: Fondo blanco, borde definido, texto en negro puro y negrita real
             draw.rectangle([x1, y1, x2, y2], fill="#FFFFFF", outline="#94a3b8", width=1)
             color_texto = "#000000"
             font_usada = font_grid_bold
-        else:
-            draw.rectangle([x1, y1, x2, y2], fill="#f8fafc", outline="#e2e8f0", width=1)
-            color_texto = "#cbd5e1"
-            font_usada = font_grid_normal
             
-        text = str(n)
-        bbox = draw.textbbox((0, 0), text, font=font_usada)
-        tw = bbox[2] - bbox[0]
-        th = bbox[3] - bbox[1]
-        tx = x1 + (cell_w - tw) / 2
-        ty = y1 + (cell_h - th) / 2
-        
-        draw.text((tx, ty), text, fill=color_texto, font=font_usada)
+            text = str(n)
+            bbox = draw.textbbox((0, 0), text, font=font_usada)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            tx = x1 + (cell_w - tw) / 2
+            ty = y1 + (cell_h - th) / 2
+            
+            draw.text((tx, ty), text, fill=color_texto, font=font_usada)
+        else:
+            # Ocupado: Fondo blanco limpio y sin texto (totalmente transparente/vacío)
+            draw.rectangle([x1, y1, x2, y2], fill="#FFFFFF", outline="#e2e8f0", width=1)
         
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -164,7 +164,7 @@ with col_head3:
     precio_unitario = st.number_input("💲 Precio:", min_value=1.0, value=350.0, step=10.0, label_visibility="collapsed")
 with col_head4:
     libres_actuales = [n for n in range(1, 631) if n not in cartones_ocupados]
-    img_b64 = generar_imagen_base64(cartones_ocupados)
+    img_b64 = generar_imagen_base64(libres_actuales)
     
     html_code = """
     <div style="margin: 0; padding: 0;">
@@ -377,12 +377,19 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             with c_acciones:
                 with st.expander("✏️ Editar"):
                     with st.form(key=f"form_edit_{id_r}"):
-                        nuevo_cliente = st.text_input("Cliente", value=cliente)
-                        nuevos_nums = st.text_input("Cartones", value=numeros)
-                        nueva_ref = st.text_input("Ref (6 dig)", value=referencia, max_chars=6)
-                        nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
+                        st.markdown("##### 🎴 Editar Datos Principales")
+                        nuevos_nums = st.text_input("🔢 Números de Cartón (Principal)", value=numeros, help="Modifica aquí los cartones asignados")
+                        nuevo_cliente = st.text_input("👤 Nombre del Cliente", value=cliente)
                         
-                        if st.form_submit_button("Guardar"):
+                        st.markdown("---")
+                        st.markdown("###### ⚙️ Datos Adicionales")
+                        col_e1, col_e2 = st.columns(2)
+                        with col_e1:
+                            nueva_ref = st.text_input("Ref (6 dig)", value=referencia, max_chars=6)
+                        with col_e2:
+                            nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
+                        
+                        if st.form_submit_button("Guardar Cambios", use_container_width=True):
                             nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
                             if not nuevo_cliente.strip():
                                 st.error("El cliente no puede estar vacío.")
