@@ -68,16 +68,17 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen exactamente con 20 números de ancho y proporciones maximizadas
+# Función para generar la imagen con 20 columnas y ZOOM MÁXIMO REAL (Celdas enormes y fuente gigante)
 def generar_imagen_base64(libres):
     cols = 20  # Exactamente 20 números de ancho por fila
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    cell_w = 85   # Ancho proporcional para celdas grandes
-    cell_h = 65   # Alto de celda espacioso
-    margin = 35
-    header_h = 100
+    # 🔍 ZOOM MÁXIMO APLICADO: Aumentamos drásticamente el tamaño de las celdas
+    cell_w = 120  # Ancho masivo por cada celda para un zoom brutal
+    cell_h = 95   # Alto masivo por cada celda
+    margin = 50
+    header_h = 130
     
     img_w = (cols * cell_w) + (margin * 2)
     img_h = (rows * cell_h) + (margin * 2) + header_h
@@ -87,16 +88,16 @@ def generar_imagen_base64(libres):
     draw = ImageDraw.Draw(img)
     
     try:
-        font_title = ImageFont.truetype("arial.ttf", 24)
-        font_subtitle = ImageFont.truetype("arial.ttf", 15)
-        # 🎴 FUENTE GRANDE DE 38 PT EN NEGRITA PARA 20 COLUMNAS
-        font_grid_bold = ImageFont.truetype("arialbd.ttf", 38) 
+        font_title = ImageFont.truetype("arial.ttf", 34)
+        font_subtitle = ImageFont.truetype("arial.ttf", 22)
+        # 🔍 🔍 FUENTE GIGANTE CON ZOOM DE 60 PT EN NEGRITA ABSOLUTA PARA WHATSAPP
+        font_grid_bold = ImageFont.truetype("arialbd.ttf", 60) 
     except:
         font_title = font_subtitle = font_grid_bold = ImageFont.load_default()
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
-    draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 60), f"Disponibles: {len(libres)} / 630  |  Diseño de 20 columnas", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 25), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
+    draw.text((margin, 75), f"Disponibles: {len(libres)} / 630  |  Vista con Zoom Máximo Real de 20 columnas", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -109,7 +110,7 @@ def generar_imagen_base64(libres):
         y1 = start_y + (r * cell_h)
         
         if n in libres:
-            # Disponible: Número grande en negro puro (#000000) centrado con precisión
+            # Disponible: Número gigantesco con zoom absoluto en negro puro (#000000) centrado con precisión
             text = str(n)
             bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
             tw = bbox[2] - bbox[0]
