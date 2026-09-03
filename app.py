@@ -83,64 +83,50 @@ def obtener_fuente(size):
             continue
     return ImageFont.load_default()
 
-# Función para generar la imagen sin bordes/cuadros y con tamaño de número uniforme
+# Función para generar la imagen exactamente igual a tu nueva referencia (texto continuo sin cuadros)
 def generar_imagen_base64(libres):
-    cols = 20  # 20 columnas exactas
+    cols = 20  # 20 columnas exactas por fila
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    cell_w = 75   # Ancho optimizado para distribución limpia
-    cell_h = 55   # Alto de cada celda invisible
-    margin = 30
-    header_h = 100
+    # Parámetros de espaciado limpio idénticos a la referencia
+    col_w = 42    
+    row_h = 28    
+    margin_x = 25
+    margin_y = 25
+    header_h = 70
     
-    img_w = (cols * cell_w) + (margin * 2)
-    img_h = (rows * cell_h) + (margin * 2) + header_h
+    img_w = (cols * col_w) + (margin_x * 2)
+    img_h = (rows * row_h) + (margin_y * 2) + header_h
     
-    # Fondo general blanco puro sin cuadrículas
+    # Fondo general blanco puro
     img = Image.new("RGB", (img_w, img_h), color="#FFFFFF")
     draw = ImageDraw.Draw(img)
     
-    font_title = obtener_fuente(28)
-    font_subtitle = obtener_fuente(16)
-    
-    # Tamaño de fuente único y uniforme para TODOS los números (disponibles y ocupados)
-    font_grid = obtener_fuente(24)
+    font_title = obtener_fuente(20)
+    font_grid = obtener_fuente(16) # Tamaño de número idéntico y unificado para todos
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
-    draw.text((margin, 18), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 58), f"Disponibles: {len(libres)} / 630  |  Vista limpia sin cuadrículas", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin_x, 15), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
     
-    start_x = margin
-    start_y = header_h + margin
+    start_x = margin_x
+    start_y = header_h + margin_y
     
     for n in range(1, 630 + 1):
         r = (n - 1) // cols
         c = (n - 1) % cols
         
-        x1 = start_x + (c * cell_w)
-        y1 = start_y + (r * cell_h)
-        x2 = x1 + cell_w
-        y2 = y1 + cell_h
+        x = start_x + (c * col_w)
+        y = start_y + (r * row_h)
         
         text = str(n)
         
-        try:
-            bbox = draw.textbbox((0, 0), text, font=font_grid)
-            tw = bbox[2] - bbox[0]
-            th = bbox[3] - bbox[1]
-        except:
-            tw, th = 20, 20
-            
-        tx = x1 + (cell_w - tw) / 2
-        ty = y1 + (cell_h - th) / 2
-        
         if n in libres:
-            # Disponibles: Color oscuro/negro con el mismo tamaño exacto
-            draw.text((tx, ty), text, fill="#0f172a", font=font_grid)
+            # Disponibles: Color negro puro y nítido
+            draw.text((x, y), text, fill="#000000", font=font_grid)
         else:
-            # Ocupados: Tono sutil/gris con el mismo tamaño exacto, sin ningún cuadro ni fondo
-            draw.text((tx, ty), text, fill="#cbd5e1", font=font_grid)
+            # Ocupados: Tono gris claro exacto al de la referencia
+            draw.text((x, y), text, fill="#cbd5e1", font=font_grid)
         
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -429,12 +415,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
 elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
-    st.caption("✨ Visualización limpia y unificada sin cuadrículas ni bordes")
+    st.caption("✨ Vista previa idéntica a tu imagen de referencia (texto continuo y limpio)")
     
-    # Matriz visual en pantalla con el mismo estilo limpio y sin bordes
+    # Matriz visual en pantalla replicando el mismo estilo exacto de la referencia
     html_matriz = """
     <div style="background-color: #ffffff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; overflow-x: auto;">
-        <div style="display: grid; grid-template-columns: repeat(20, minmax(36px, 1fr)); gap: 6px; text-align: center;">
+        <div style="display: grid; grid-template-columns: repeat(20, minmax(36px, 1fr)); gap: 6px; text-align: left;">
     """
     
     for num in range(1, 631):
@@ -443,9 +429,9 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
             <div style="
                 font-family: Arial, sans-serif;
                 font-weight: bold;
-                font-size: 15px;
+                font-size: 14px;
                 color: #cbd5e1;
-                padding: 6px 0;
+                padding: 4px 0;
             ">{num}</div>
             """
         else:
@@ -453,9 +439,9 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
             <div style="
                 font-family: Arial, sans-serif;
                 font-weight: bold;
-                font-size: 15px;
-                color: #0f172a;
-                padding: 6px 0;
+                font-size: 14px;
+                color: #000000;
+                padding: 4px 0;
             ">{num}</div>
             """
             
