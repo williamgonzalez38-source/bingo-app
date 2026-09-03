@@ -36,7 +36,7 @@ def init_db():
 
 init_db()
 
-# Estilos CSS personalizados para destacar visualmente el campo de cartones al editar
+# Estilos CSS personalizados
 st.markdown("""
     <style>
     .main { background-color: #0f172a; color: #f8fafc; }
@@ -68,14 +68,14 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen en base64 con números aún más grandes y perfectamente proporcionados
+# Función para generar la imagen en base64 con números en tamaño 24 y celdas perfectamente proporcionadas
 def generar_imagen_base64(libres):
     cols = 21  # 21 columnas para mantener el balance horizontal
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    cell_w = 50  # Celdas más amplias para acomodar números grandes sin amontonarse
-    cell_h = 38  # Ajuste proporcional de altura para que los 630 cartones quepan perfectamente
+    cell_w = 54  # Celdas optimizadas para acomodar la fuente de tamaño 24 sin amontonarse
+    cell_h = 42  # Altura proporcional
     margin = 28
     header_h = 75
     
@@ -89,14 +89,14 @@ def generar_imagen_base64(libres):
     try:
         font_title = ImageFont.truetype("arial.ttf", 20)
         font_subtitle = ImageFont.truetype("arial.ttf", 13)
-        # Tamaño de fuente maximizado para lograr una lectura clara y destacada
-        font_grid_bold = ImageFont.truetype("arialbd.ttf", 20) 
+        # Fuente configurada exactamente en tamaño 24 en negrita
+        font_grid_bold = ImageFont.truetype("arialbd.ttf", 24) 
     except:
         font_title = font_subtitle = font_grid_bold = ImageFont.load_default()
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 15), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 45), f"Disponibles: {len(libres)} / 630  |  Números grandes en alta visibilidad", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 45), f"Disponibles: {len(libres)} / 630  |  Visualización con fuente de 24 pt", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -109,7 +109,7 @@ def generar_imagen_base64(libres):
         y1 = start_y + (r * cell_h)
         
         if n in libres:
-            # Disponible: Número en negro puro (#000000) con fuente grande, negrita y centrado exacto
+            # Disponible: Número en negro puro (#000000) con fuente de 24 pt, negrita y centrado exacto
             text = str(n)
             bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
             tw = bbox[2] - bbox[0]
