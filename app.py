@@ -155,8 +155,8 @@ with col_head4:
     libres_actuales = [n for n in range(1, 631) if n not in cartones_ocupados]
     img_b64 = generar_imagen_base64(cartones_ocupados)
     
-    # Componente web HTML/JS corregido (llaves escapadas para evitar conflicto de f-strings)
-    html_code = f"""
+    # Componente web usando string normal y .replace() para evitar conflictos de llaves con f-strings
+    html_code = """
     <div style="margin: 0; padding: 0;">
         <button id="btnCopiarImg" onclick="copiarImagen()" style="
             background-color: #2563eb;
@@ -177,37 +177,38 @@ with col_head4:
     </div>
 
     <script>
-    async function copiarImagen() {{
+    async function copiarImagen() {
         const btn = document.getElementById('btnCopiarImg');
         const msg = document.getElementById('msgEstado');
         
-        try {{
-            const base64Data = "{img_b64}";
+        try {
+            const base64Data = "REPLACE_ME_B64";
             const res = await fetch('data:image/png;base64,' + base64Data);
             const blob = await res.blob();
             
             await navigator.clipboard.write([
-                new ClipboardItem({{ 'image/png': blob }])
+                new ClipboardItem({ 'image/png': blob })
             ]);
             
             btn.style.backgroundColor = '#16a34a';
             btn.innerText = '¡Copiada con éxito!';
             msg.innerText = '¡Ya puedes ir a WhatsApp y presionar Ctrl + V!';
             
-            setTimeout(() => {{
+            setTimeout(() => {
                 btn.style.backgroundColor = '#2563eb';
                 btn.innerText = '📋 Copiar Imagen';
                 msg.innerText = '';
-            }}, 3500);
-        }} catch (err) {{
+            }, 3500);
+        } catch (err) {
             console.error(err);
             btn.style.backgroundColor = '#dc2626';
             btn.innerText = 'Error al copiar';
             msg.innerText = 'Intenta usar un navegador compatible (Chrome/Edge)';
-        }}
-    }}
+        }
+    }
     </script>
-    """
+    """.replace("REPLACE_ME_B64", img_b64)
+    
     components.html(html_code, height=65)
 
 if menu_seleccionado == "📊 Resumen General":
