@@ -83,9 +83,9 @@ def obtener_fuente(size):
             continue
     return ImageFont.load_default()
 
-# Función para generar la imagen con 20 columnas y números gigantes ultra visibles
+# Función para generar la imagen con 20 columnas y números máximos del tamaño de la celda
 def generar_imagen_base64(libres):
-    cols = 20  # Exactamente las 20 columnas solicitadas
+    cols = 20  # Mantenemos las 20 columnas exactas
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
@@ -103,12 +103,13 @@ def generar_imagen_base64(libres):
     
     font_title = obtener_fuente(32)
     font_subtitle = obtener_fuente(20)
-    # 💥 FUENTE GIGANTE DE 52 PT EN NEGRITA ABSOLUTA PARA MÁXIMA VISIBILIDAD
-    font_grid_bold = obtener_fuente(52)
+    
+    # 💥 FUENTE GIGANTE MÁXIMA DE 68 PT: Llena prácticamente todo el recuadro de la celda
+    font_grid_bold = obtener_fuente(68)
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 68), f"Disponibles: {len(libres)} / 630  |  20 Columnas con Zoom Gigante Visible", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 68), f"Disponibles: {len(libres)} / 630  |  Números a tamaño completo de celda", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -117,30 +118,31 @@ def generar_imagen_base64(libres):
         r = (n - 1) // cols
         c = (n - 1) % cols
         
-        x1 = start_x + (c * cell_w) + 3
-        y1 = start_y + (r * cell_h) + 3
-        x2 = x1 + cell_w - 6
-        y2 = y1 + cell_h - 6
+        x1 = start_x + (c * cell_w) + 2
+        y1 = start_y + (r * cell_h) + 2
+        x2 = x1 + cell_w - 4
+        y2 = y1 + cell_h - 4
         
         if n in libres:
-            # Disponible: Cuadro sutil de fondo y número negro gigante súper visible
-            draw.rectangle([x1, y1, x2, y2], fill="#f1f5f9", outline="#cbd5e1", width=2)
+            # Cuadro con fondo limpio y borde nítido
+            draw.rectangle([x1, y1, x2, y2], fill="#f8fafc", outline="#94a3b8", width=2)
             text = str(n)
             
-            # Cálculo seguro para centrar el texto grande
+            # Centrado automático de precisión para que ocupe todo el espacio disponible
             try:
                 bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
                 tw = bbox[2] - bbox[0]
                 th = bbox[3] - bbox[1]
             except:
-                tw, th = 30, 30
+                tw, th = 40, 40
                 
             tx = x1 + ((x2 - x1) - tw) / 2
-            ty = y1 + ((y2 - y1) - th) / 2 - 4
+            ty = y1 + ((y2 - y1) - th) / 2 - 6
             
-            draw.text((tx, ty), text, fill="#0f172a", font=font_grid_bold)
+            # Número en negro puro y negrita máxima
+            draw.text((tx, ty), text, fill="#000000", font=font_grid_bold)
         else:
-            # Ocupado: Celda limpia en blanco (vacía)
+            # Ocupado: Celda totalmente en blanco
             pass
         
     buf = io.BytesIO()
