@@ -65,14 +65,28 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Menú lateral fijo y compacto
+# Menú lateral fijo en la barra lateral (Sidebar) con opciones fijas una debajo de otra (sin selectbox desplegable)
 with st.sidebar:
-    st.markdown("### 🧭 Navegación")
-    menu_seleccionado = st.radio(
-        "Menú",
-        ["📊 Resumen General", "📋 Ventas y Registro", "🎟️ Matriz (1-630)"],
-        label_visibility="collapsed"
-    )
+    st.markdown("### 🧭 Menú de Navegación")
+    st.markdown("---")
+    
+    # Usamos session_state para recordar la opción seleccionada mediante botones fijos
+    if "menu_activo" not in st.session_state:
+        st.session_state["menu_activo"] = "📋 Ventas y Registro"
+
+    if st.button("📊 Resumen General", use_container_width=True):
+        st.session_state["menu_activo"] = "📊 Resumen General"
+        st.rerun()
+        
+    if st.button("📋 Ventas y Registro", use_container_width=True):
+        st.session_state["menu_activo"] = "📋 Ventas y Registro"
+        st.rerun()
+        
+    if st.button("🎟️ Matriz (1-630)", use_container_width=True):
+        st.session_state["menu_activo"] = "🎟️ Matriz (1-630)"
+        st.rerun()
+
+menu_seleccionado = st.session_state["menu_activo"]
 
 if menu_seleccionado == "📊 Resumen General":
     st.markdown("#### Resumen General de la Partida")
@@ -118,7 +132,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.success("¡Cliente registrado con éxito!")
                     st.rerun()
 
-        # Botón para copiar números disponibles optimizado para WhatsApp sin errores de formato
+        # Botón para copiar números disponibles optimizado para WhatsApp
         with st.container(border=True):
             col_disp_info, col_disp_btn = st.columns([3, 1])
             with col_disp_info:
@@ -128,9 +142,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                 if st.button("📋 Copiar Libres", use_container_width=True):
                     libres = [n for n in range(1, 631) if n not in cartones_ocupados]
                     
-                    # Estructura compacta y segura para chat de WhatsApp
                     lineas_matriz = []
-                    chunk_size = 12  # 12 números por línea para que se vea compacto
+                    chunk_size = 12
                     for i in range(0, len(libres), chunk_size):
                         bloque = libres[i:i + chunk_size]
                         linea_str = " ".join([f"*{n}*" for n in bloque])
@@ -144,7 +157,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
         st.divider()
 
-        # Fila Inferior: Importar desde WhatsApp y Acciones al Azar / Borrar organizadas lado a lado
+        # Fila Inferior: Importar desde WhatsApp y Acciones al Azar / Borrar
         col_inf1, col_inf2 = st.columns(2)
         
         with col_inf1:
@@ -240,7 +253,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
     st.markdown("#### 📋 Listado General de Registros")
 
-    # Mostrar todos los registros apilados uno encima del otro de manera vertical con su monto en Bs.
     for r in filas_filtradas:
         id_r, _, cliente, numeros, cantidad, estado, referencia = r
         cant_cartones = len(re.findall(r"\b\d+\b", numeros))
