@@ -83,34 +83,33 @@ def obtener_fuente(size):
             continue
     return ImageFont.load_default()
 
-# Función para generar la imagen con el diseño exacto de la referencia (libres grandes, ocupados pequeños)
+# Función para generar la imagen sin bordes/cuadros y con tamaño de número uniforme
 def generar_imagen_base64(libres):
     cols = 20  # 20 columnas exactas
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    cell_w = 110  
-    cell_h = 90   
-    margin = 40
-    header_h = 120
+    cell_w = 75   # Ancho optimizado para distribución limpia
+    cell_h = 55   # Alto de cada celda invisible
+    margin = 30
+    header_h = 100
     
     img_w = (cols * cell_w) + (margin * 2)
     img_h = (rows * cell_h) + (margin * 2) + header_h
     
-    # Fondo general blanco puro
+    # Fondo general blanco puro sin cuadrículas
     img = Image.new("RGB", (img_w, img_h), color="#FFFFFF")
     draw = ImageDraw.Draw(img)
     
-    font_title = obtener_fuente(32)
-    font_subtitle = obtener_fuente(20)
+    font_title = obtener_fuente(28)
+    font_subtitle = obtener_fuente(16)
     
-    # Fuentes para los números (Libres grandes y marcados; Ocupados pequeños y sutiles)
-    font_grid_libres = obtener_fuente(60)
-    font_grid_ocupados = obtener_fuente(22)
+    # Tamaño de fuente único y uniforme para TODOS los números (disponibles y ocupados)
+    font_grid = obtener_fuente(24)
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
-    draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 68), f"Disponibles: {len(libres)} / 630  |  Diseño optimizado para WhatsApp", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 18), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
+    draw.text((margin, 58), f"Disponibles: {len(libres)} / 630  |  Vista limpia sin cuadrículas", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -119,43 +118,29 @@ def generar_imagen_base64(libres):
         r = (n - 1) // cols
         c = (n - 1) % cols
         
-        x1 = start_x + (c * cell_w) + 2
-        y1 = start_y + (r * cell_h) + 2
-        x2 = x1 + cell_w - 4
-        y2 = y1 + cell_h - 4
+        x1 = start_x + (c * cell_w)
+        y1 = start_y + (r * cell_h)
+        x2 = x1 + cell_w
+        y2 = y1 + cell_h
         
         text = str(n)
         
+        try:
+            bbox = draw.textbbox((0, 0), text, font=font_grid)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+        except:
+            tw, th = 20, 20
+            
+        tx = x1 + (cell_w - tw) / 2
+        ty = y1 + (cell_h - th) / 2
+        
         if n in libres:
-            # Cuadro libre: Fondo blanco/claro, borde nítido y número grande
-            draw.rectangle([x1, y1, x2, y2], fill="#f8fafc", outline="#94a3b8", width=2)
-            
-            try:
-                bbox = draw.textbbox((0, 0), text, font=font_grid_libres)
-                tw = bbox[2] - bbox[0]
-                th = bbox[3] - bbox[1]
-            except:
-                tw, th = 40, 40
-                
-            tx = x1 + ((x2 - x1) - tw) / 2
-            ty = y1 + ((y2 - y1) - th) / 2 - 6
-            
-            draw.text((tx, ty), text, fill="#000000", font=font_grid_libres)
+            # Disponibles: Color oscuro/negro con el mismo tamaño exacto
+            draw.text((tx, ty), text, fill="#0f172a", font=font_grid)
         else:
-            # Cuadro ocupado: Fondo sutil y número pequeño gris (exacto a tu referencia)
-            draw.rectangle([x1, y1, x2, y2], fill="#f1f5f9", outline="#e2e8f0", width=1)
-            
-            try:
-                bbox = draw.textbbox((0, 0), text, font=font_grid_ocupados)
-                tw = bbox[2] - bbox[0]
-                th = bbox[3] - bbox[1]
-            except:
-                tw, th = 20, 20
-                
-            tx = x1 + ((x2 - x1) - tw) / 2
-            ty = y1 + ((y2 - y1) - th) / 2
-            
-            draw.text((tx, ty), text, fill="#cbd5e1", font=font_grid_ocupados)
+            # Ocupados: Tono sutil/gris con el mismo tamaño exacto, sin ningún cuadro ni fondo
+            draw.text((tx, ty), text, fill="#cbd5e1", font=font_grid)
         
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -444,42 +429,33 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
 elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
-    st.caption("✨ Visualización interactiva idéntica al diseño de tu referencia (libres destacados, ocupados sutiles)")
+    st.caption("✨ Visualización limpia y unificada sin cuadrículas ni bordes")
     
-    # Matriz en pantalla replicando el mismo estilo visual de la referencia
+    # Matriz visual en pantalla con el mismo estilo limpio y sin bordes
     html_matriz = """
-    <div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; overflow-x: auto;">
-        <div style="display: grid; grid-template-columns: repeat(20, minmax(42px, 1fr)); gap: 4px;">
+    <div style="background-color: #ffffff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; overflow-x: auto;">
+        <div style="display: grid; grid-template-columns: repeat(20, minmax(36px, 1fr)); gap: 6px; text-align: center;">
     """
     
     for num in range(1, 631):
         if num in cartones_ocupados:
             html_matriz += f"""
             <div style="
-                background-color: #f1f5f9;
-                border: 1px solid #e2e8f0;
-                border-radius: 4px;
-                text-align: center;
-                padding: 10px 0;
                 font-family: Arial, sans-serif;
-                font-weight: normal;
-                font-size: 11px;
+                font-weight: bold;
+                font-size: 15px;
                 color: #cbd5e1;
+                padding: 6px 0;
             ">{num}</div>
             """
         else:
             html_matriz += f"""
             <div style="
-                background-color: #f8fafc;
-                border: 2px solid #94a3b8;
-                border-radius: 4px;
-                text-align: center;
-                padding: 10px 0;
                 font-family: Arial, sans-serif;
-                font-weight: 900;
-                font-size: 18px;
-                color: #000000;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                font-weight: bold;
+                font-size: 15px;
+                color: #0f172a;
+                padding: 6px 0;
             ">{num}</div>
             """
             
