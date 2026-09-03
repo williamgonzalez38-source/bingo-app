@@ -142,7 +142,7 @@ def generar_imagen_base64(libres):
             # Número en negro puro y negrita máxima
             draw.text((tx, ty), text, fill="#000000", font=font_grid_bold)
         else:
-            # Ocupado: Celda totalmente en blanco
+            # Ocupado: Celda totalmente en blanco o tachada sutilmente
             pass
         
     buf = io.BytesIO()
@@ -227,7 +227,7 @@ with col_head4:
                 btn.innerText = '📋 Copiar Imagen';
                 msg.innerText = '';
             }, 3500);
-        } catch (err) {
+        } id_err => {
             console.error(err);
             btn.style.backgroundColor = '#dc2626';
             btn.innerText = 'Error al copiar';
@@ -432,16 +432,51 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
 elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
-    st.caption("🟢 Verde: Libre  |  🔴 Rojo: Ocupado")
+    st.caption("✨ Visualización idéntica a la imagen generada para WhatsApp (Números grandes y legibles)")
     
-    cols_por_fila = 20
-    for i in range(0, 630, cols_por_fila):
-        cols = st.columns(cols_por_fila)
-        for j in range(cols_por_fila):
-            num = i + j + 1
-            if num <= 630:
-                with cols[j]:
-                    if num in cartones_ocupados:
-                        st.markdown(f"<div style='background-color:#991b1b; color:#ffffff; text-align:center; padding:2px 0px; margin:1px 0px; border-radius:2px; font-weight:bold; font-size:11px; line-height:1.2;'>{num}</div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"<div style='background-color:#ffffff; color:#0f172a; text-align:center; padding:2px 0px; margin:1px 0px; border-radius:2px; font-weight:bold; font-size:11px; line-height:1.2;'>{num}</div>", unsafe_allow_html=True)
+    # 💥 VISTA PREVIA INTERACTIVA CON ESTILO VISUAL IDÉNTICO A LA IMAGEN GENERADA
+    html_matriz = """
+    <div style="background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; overflow-x: auto;">
+        <div style="display: grid; grid-template-columns: repeat(20, minmax(42px, 1fr)); gap: 4px;">
+    """
+    
+    for num in range(1, 631):
+        if num in cartones_ocupados:
+            # Ocupado: celdas sutiles o en blanco tal como en la imagen de WhatsApp
+            html_matriz += f"""
+            <div style="
+                background-color: #f1f5f9;
+                border: 1px solid #e2e8f0;
+                border-radius: 4px;
+                text-align: center;
+                padding: 10px 0;
+                font-family: Arial, sans-serif;
+                font-weight: bold;
+                font-size: 10px;
+                color: #cbd5e1;
+                opacity: 0.3;
+            ">{num}</div>
+            """
+        else:
+            # Libre: Cuadros limpios con números gigantes y negrita absoluta idénticos al reporte copiado
+            html_matriz += f"""
+            <div style="
+                background-color: #f8fafc;
+                border: 2px solid #94a3b8;
+                border-radius: 4px;
+                text-align: center;
+                padding: 10px 0;
+                font-family: Arial, sans-serif;
+                font-weight: 900;
+                font-size: 18px;
+                color: #000000;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            ">{num}</div>
+            """
+            
+    html_matriz += """
+        </div>
+    </div>
+    """
+    
+    components.html(html_matriz, height=750, scrolling=True)
