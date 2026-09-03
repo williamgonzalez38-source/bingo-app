@@ -155,8 +155,8 @@ with col_head4:
     libres_actuales = [n for n in range(1, 631) if n not in cartones_ocupados]
     img_b64 = generar_imagen_base64(cartones_ocupados)
     
-    # Componente web HTML/JS integrado para copiar la imagen directamente al portapapeles y pegarla directo en WhatsApp (Ctrl+V)
-    components.html(f"""
+    # Componente web HTML/JS con formato correcto sin conflictos de f-string en llaves de JavaScript
+    html_code = f"""
     <div style="margin: 0; padding: 0;">
         <button id="btnCopiarImg" onclick="copiarImagen()" style="
             background-color: #2563eb;
@@ -183,7 +183,7 @@ with col_head4:
         
         try {{
             const base64Data = "{img_b64}";
-            const res = await fetch(`data:image/png;base64,${{base64Data}}`);
+            const res = await fetch('data:image/png;base64,' + base64Data);
             const blob = await res.blob();
             
             await navigator.clipboard.write([
@@ -207,7 +207,8 @@ with col_head4:
         }}
     }}
     </script>
-    """, height=65)
+    """
+    components.html(html_code, height=65)
 
 if menu_seleccionado == "📊 Resumen General":
     st.markdown("#### Resumen General de la Partida")
@@ -377,7 +378,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
                             if not nuevo_cliente.strip():
                                 st.error("El cliente no puede estar vacío.")
-                            elif not nums_val_edit:
+                            elif not nums_val_exito := nums_val_edit: # simplified check
                                 st.error("Cartones inválidos.")
                             else:
                                 conn = sqlite3.connect(DB_NAME)
