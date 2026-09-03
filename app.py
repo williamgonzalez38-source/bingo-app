@@ -68,17 +68,31 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen manteniendo exactamente las 20 columnas pero con los números MÁXIMOS Y GIGANTES
+# Función para obtener la mejor fuente disponible en el sistema operativo
+def obtener_fuente(size):
+    candidatos = [
+        "arialbd.ttf", "Arial Bold.ttf", "arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "DejaVuSans-Bold.ttf"
+    ]
+    for c in candidatos:
+        try:
+            return ImageFont.truetype(c, size)
+        except:
+            continue
+    return ImageFont.load_default()
+
+# Función para generar la imagen con 20 columnas y números gigantes ultra visibles
 def generar_imagen_base64(libres):
-    cols = 20  # Mantenemos exactamente las 20 columnas de ancho que te gustaron
+    cols = 20  # Exactamente las 20 columnas solicitadas
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    # Amplitud expandida de celda para soportar una fuente monstruosa de 76 pt sin recortes
-    cell_w = 145  
-    cell_h = 115  
-    margin = 60
-    header_h = 140
+    cell_w = 110  
+    cell_h = 90   
+    margin = 40
+    header_h = 120
     
     img_w = (cols * cell_w) + (margin * 2)
     img_h = (rows * cell_h) + (margin * 2) + header_h
@@ -87,17 +101,14 @@ def generar_imagen_base64(libres):
     img = Image.new("RGB", (img_w, img_h), color="#FFFFFF")
     draw = ImageDraw.Draw(img)
     
-    try:
-        font_title = ImageFont.truetype("arial.ttf", 36)
-        font_subtitle = ImageFont.truetype("arial.ttf", 22)
-        # 💥 NÚMEROS GIGANTESCOS DE 76 PT EN NEGRITA ABSOLUTA PARA VISIBILIDAD MÁXIMA EN WHATSAPP
-        font_grid_bold = ImageFont.truetype("arialbd.ttf", 76) 
-    except:
-        font_title = font_subtitle = font_grid_bold = ImageFont.load_default()
+    font_title = obtener_fuente(32)
+    font_subtitle = obtener_fuente(20)
+    # 💥 FUENTE GIGANTE DE 52 PT EN NEGRITA ABSOLUTA PARA MÁXIMA VISIBILIDAD
+    font_grid_bold = obtener_fuente(52)
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
-    draw.text((margin, 25), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 78), f"Disponibles: {len(libres)} / 630  |  Formato de 20 columnas con Números Gigantes Máximos", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
+    draw.text((margin, 68), f"Disponibles: {len(libres)} / 630  |  20 Columnas con Zoom Gigante Visible", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -106,21 +117,30 @@ def generar_imagen_base64(libres):
         r = (n - 1) // cols
         c = (n - 1) % cols
         
-        x1 = start_x + (c * cell_w)
-        y1 = start_y + (r * cell_h)
+        x1 = start_x + (c * cell_w) + 3
+        y1 = start_y + (r * cell_h) + 3
+        x2 = x1 + cell_w - 6
+        y2 = y1 + cell_h - 6
         
         if n in libres:
-            # Disponible: Número enorme y súper visible centrado con precisión absoluta
+            # Disponible: Cuadro sutil de fondo y número negro gigante súper visible
+            draw.rectangle([x1, y1, x2, y2], fill="#f1f5f9", outline="#cbd5e1", width=2)
             text = str(n)
-            bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
-            tw = bbox[2] - bbox[0]
-            th = bbox[3] - bbox[1]
-            tx = x1 + (cell_w - tw) / 2
-            ty = y1 + (cell_h - th) / 2
             
-            draw.text((tx, ty), text, fill="#000000", font=font_grid_bold)
+            # Cálculo seguro para centrar el texto grande
+            try:
+                bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
+                tw = bbox[2] - bbox[0]
+                th = bbox[3] - bbox[1]
+            except:
+                tw, th = 30, 30
+                
+            tx = x1 + ((x2 - x1) - tw) / 2
+            ty = y1 + ((y2 - y1) - th) / 2 - 4
+            
+            draw.text((tx, ty), text, fill="#0f172a", font=font_grid_bold)
         else:
-            # Ocupado: Se deja totalmente en blanco (vacío)
+            # Ocupado: Celda limpia en blanco (vacía)
             pass
         
     buf = io.BytesIO()
