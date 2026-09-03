@@ -68,16 +68,16 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen en base64 con un diseño menos alto y más compacto, sin líneas de cuadrícula y números bien intensos
+# Función para generar la imagen en base64 con celdas y números ligeramente más grandes pero conservando un formato horizontal balanceado
 def generar_imagen_base64(libres):
-    cols = 21  # Aumentamos las columnas para hacerla más horizontal y menos alta
+    cols = 21  # 21 columnas para mantener el formato horizontal equilibrado
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    cell_w = 42
-    cell_h = 30  # Altura de celda reducida para que sea menos alta
-    margin = 24
-    header_h = 75  # Cabecera más compacta
+    cell_w = 46  # Aumentado ligeramente para dar espacio a números más grandes
+    cell_h = 34  # Ajustado ligeramente en altura para que los 630 cartones quepan de forma proporcional
+    margin = 26
+    header_h = 75
     
     img_w = (cols * cell_w) + (margin * 2)
     img_h = (rows * cell_h) + (margin * 2) + header_h
@@ -89,13 +89,14 @@ def generar_imagen_base64(libres):
     try:
         font_title = ImageFont.truetype("arial.ttf", 20)
         font_subtitle = ImageFont.truetype("arial.ttf", 13)
-        font_grid_bold = ImageFont.truetype("arialbd.ttf", 14) 
+        # Tamaño de fuente aumentado para que los números se distingan mucho mejor
+        font_grid_bold = ImageFont.truetype("arialbd.ttf", 17) 
     except:
         font_title = font_subtitle = font_grid_bold = ImageFont.load_default()
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 15), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 45), f"Disponibles: {len(libres)} / 630  |  Formato compacto sin líneas", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 45), f"Disponibles: {len(libres)} / 630  |  Números más grandes y claros", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -108,7 +109,7 @@ def generar_imagen_base64(libres):
         y1 = start_y + (r * cell_h)
         
         if n in libres:
-            # Disponible: Número en negro puro (#000000) con negrita fuerte, sin bordes ni rayas
+            # Disponible: Número en negro puro (#000000) con fuente más grande y negrita, sin líneas ni bordes
             text = str(n)
             bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
             tw = bbox[2] - bbox[0]
@@ -118,7 +119,7 @@ def generar_imagen_base64(libres):
             
             draw.text((tx, ty), text, fill="#000000", font=font_grid_bold)
         else:
-            # Ocupado: Se deja totalmente en blanco (transparente/vacío)
+            # Ocupado: Se deja totalmente en blanco (vacío)
             pass
         
     buf = io.BytesIO()
