@@ -37,6 +37,8 @@ st.markdown("""
     <style>
     .main { background-color: #0f172a; color: #f8fafc; }
     .stTextInput input, .stNumberInput input { background-color: #1e293b; color: white; border: 1px solid #334155; }
+    /* Ajustes compactos para la barra lateral fija */
+    section[data-testid="stSidebar"] { background-color: #0b1120; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -64,12 +66,12 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Menú de navegación en la barra lateral desplegable
+# Menú lateral fijo y compacto
 with st.sidebar:
-    st.markdown("### 🧭 Menú Principal")
+    st.markdown("### 🧭 Navegación")
     menu_seleccionado = st.radio(
-        "Seleccione una opción:",
-        ["📊 Resumen General", "📋 Ventas y Registro", "🎟️ Matriz de Disponibles (1-630)"],
+        "Menú",
+        ["📊 Resumen General", "📋 Ventas y Registro", "🎟️ Matriz (1-630)"],
         label_visibility="collapsed"
     )
 
@@ -262,7 +264,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     conn.close()
                     st.rerun()
 
-elif menu_seleccionado == "🎟️ Matriz de Disponibles (1-630)":
+elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
     st.caption("🟢 Verde: Libre  |  🔴 Rojo: Ocupado")
     
