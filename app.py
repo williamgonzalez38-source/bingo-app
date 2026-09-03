@@ -68,16 +68,16 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen optimizada con números GIGANTES y alta visibilidad en WhatsApp
+# Función para generar la imagen con números GIGANTES reales para WhatsApp
 def generar_imagen_base64(libres):
-    cols = 15  # 15 columnas (menos columnas = celdas mucho más grandes y anchas para WhatsApp)
+    cols = 10  # Solo 10 columnas para que las celdas sean masivas y los números se vean enormes en WhatsApp
     total_items = 630
     rows = (total_items + cols - 1) // cols
     
-    cell_w = 75  # Celdas considerablemente más anchas
-    cell_h = 60  # Celdas considerablemente más altas
-    margin = 35
-    header_h = 90
+    cell_w = 110  # Celdas muy anchas
+    cell_h = 75   # Celdas muy altas
+    margin = 40
+    header_h = 100
     
     img_w = (cols * cell_w) + (margin * 2)
     img_h = (rows * cell_h) + (margin * 2) + header_h
@@ -87,16 +87,16 @@ def generar_imagen_base64(libres):
     draw = ImageDraw.Draw(img)
     
     try:
-        font_title = ImageFont.truetype("arial.ttf", 22)
-        font_subtitle = ImageFont.truetype("arial.ttf", 14)
-        # 🎴 FUENTE GIGANTE DE 36 PT EN NEGRITA PARA MÁXIMA VISIBILIDAD EN WHATSAPP
-        font_grid_bold = ImageFont.truetype("arialbd.ttf", 36) 
+        font_title = ImageFont.truetype("arial.ttf", 24)
+        font_subtitle = ImageFont.truetype("arial.ttf", 16)
+        # 🎴 FUENTE MASIVA DE 48 PT EN NEGRITA PARA QUE SE VEAN GIGANTES EN WHATSAPP
+        font_grid_bold = ImageFont.truetype("arialbd.ttf", 48) 
     except:
         font_title = font_subtitle = font_grid_bold = ImageFont.load_default()
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
-    draw.text((margin, 18), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
-    draw.text((margin, 52), f"Disponibles: {len(libres)} / 630  |  Vista optimizada en alta definición para WhatsApp", fill="#94a3b8", font=font_subtitle)
+    draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
+    draw.text((margin, 60), f"Disponibles: {len(libres)} / 630  |  Visualización en tamaño gigante real", fill="#94a3b8", font=font_subtitle)
     
     start_x = margin
     start_y = header_h + margin
@@ -109,7 +109,7 @@ def generar_imagen_base64(libres):
         y1 = start_y + (r * cell_h)
         
         if n in libres:
-            # Disponible: Número gigantesco en negro puro (#000000) centrado con precisión absoluta
+            # Disponible: Número gigantesco en negro puro (#000000) centrado con precisión
             text = str(n)
             bbox = draw.textbbox((0, 0), text, font=font_grid_bold)
             tw = bbox[2] - bbox[0]
