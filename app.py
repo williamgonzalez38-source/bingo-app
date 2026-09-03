@@ -297,19 +297,19 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         for l in lineas_crudas:
                             l_limpia = l.strip()
                             if l_limpia:
-                                # Omitir líneas que sean solo horas (ej. 14:30 o 02:15 p. m.)
-                                if not re.fullmatch(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l_limpia, re.IGNORECASE):
+                                # Filtrar líneas que contengan únicamente marcas de hora comunes en chats
+                                if not re.fullmatch(r'[\d:\s]+(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l_limpia, re.IGNORECASE):
                                     lineas.append(l_limpia)
 
                         nombre_cliente = "Cliente WhatsApp"
                         cuerpo_busqueda = texto_wpp_unificado
 
-                        # Extracción mejorada del nombre del contacto de WhatsApp
+                        # Extracción precisa del contacto incluso con un solo mensaje seleccionado
                         if len(lineas) >= 1:
                             posible_nombre = lineas[0]
-                            # Limpiar etiquetas de hora u otros corchetes si los hubiera al inicio
+                            # Limpiar corchetes de hora si los hay al inicio
                             posible_nombre = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', posible_nombre).strip()
-                            if posible_nombre:
+                            if posible_nombre and not posible_nombre.isdigit():
                                 nombre_cliente = posible_nombre
                             if len(lineas) > 1:
                                 cuerpo_busqueda = " ".join(lineas[1:])
@@ -339,7 +339,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             with st.container(border=True):
                 cant_azar = st.number_input("Cartones al azar", min_value=1, max_value=630, value=1)
                 if st.button("🎲 Asignar al Azar", use_container_width=True):
-                    # Consultar en tiempo real los cartones ocupados actuales para respetar todos los pedidos previos
+                    # Consultar en tiempo real los cartones ocupados actuales para garantizar disponibilidad real
                     conn_tmp = sqlite3.connect(DB_NAME)
                     c_tmp = conn_tmp.cursor()
                     c_tmp.execute("SELECT numeros FROM ventas")
@@ -359,11 +359,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         seleccionados = sorted(random.sample(disponibles_reales, cant_azar))
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
+                        # Inserción directa e independiente sin alterar los demás registros
                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), "Cliente Rápido", ", ".join(map(str, seleccionados)), cant_azar, "Pendiente por Cancelar", ""))
                         conn.commit()
                         conn.close()
-                        st.success(f"¡Asignados {cant_azar} cartones disponibles al azar!")
+                        st.success(f"¡Asignados y guardados {cant_azar} cartones al azar!")
                         st.rerun()
                 
                 st.markdown("---")
