@@ -36,7 +36,7 @@ def init_db():
 
 init_db()
 
-# Estilos CSS para barra lateral ultra compacta y optimización máxima de espacio
+# Estilos CSS para barra lateral ultra compacta (100px) y optimización máxima de espacio
 st.markdown("""
     <style>
     .main { background-color: #0f172a; color: #f8fafc; padding-top: 0.5rem; }
@@ -284,7 +284,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
                     "Pega aquí todo lo resaltado en WhatsApp", 
-                    placeholder="Pega aquí (Nombre de WhatsApp arriba + mensaje de números abajo)..."
+                    placeholder="Pega aquí (Nombre del contacto arriba + mensaje abajo)..."
                 )
                 btn_wpp = st.form_submit_button("Procesar y Registrar")
                 
@@ -297,14 +297,17 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         for l in lineas_crudas:
                             l_limpia = l.strip()
                             if l_limpia:
+                                # Omitir líneas que sean solo horas (ej. 14:30 o 02:15 p. m.)
                                 if not re.fullmatch(r'\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l_limpia, re.IGNORECASE):
                                     lineas.append(l_limpia)
 
                         nombre_cliente = "Cliente WhatsApp"
                         cuerpo_busqueda = texto_wpp_unificado
 
+                        # Extracción mejorada del nombre del contacto de WhatsApp
                         if len(lineas) >= 1:
                             posible_nombre = lineas[0]
+                            # Limpiar etiquetas de hora u otros corchetes si los hubiera al inicio
                             posible_nombre = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', posible_nombre).strip()
                             if posible_nombre:
                                 nombre_cliente = posible_nombre
@@ -328,7 +331,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                       (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
                             conn.commit()
                             conn.close()
-                            st.success(f"¡Registrado! Cliente: {nombre_cliente} | Cartones: {len(nums_wpp)}")
+                            st.success(f"¡Registrado! Contacto: {nombre_cliente} | Cartones: {len(nums_wpp)}")
                             st.rerun()
 
         with col_inf2:
@@ -336,18 +339,31 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             with st.container(border=True):
                 cant_azar = st.number_input("Cartones al azar", min_value=1, max_value=630, value=1)
                 if st.button("🎲 Asignar al Azar", use_container_width=True):
-                    disponibles = [n for n in range(1, 631) if n not in cartones_ocupados]
-                    if len(disponibles) < cant_azar:
-                        st.error(f"Solo quedan {len(disponibles)} libres.")
+                    # Consultar en tiempo real los cartones ocupados actuales para respetar todos los pedidos previos
+                    conn_tmp = sqlite3.connect(DB_NAME)
+                    c_tmp = conn_tmp.cursor()
+                    c_tmp.execute("SELECT numeros FROM ventas")
+                    filas_actuales = c_tmp.fetchall()
+                    conn_tmp.close()
+                    
+                    ocupados_actuales = set()
+                    for f_nums, in filas_actuales:
+                        for n in re.findall(r"\b\d+\b", f_nums):
+                            ocupados_actuales.add(int(n))
+                    
+                    disponibles_reales = [n for n in range(1, 631) if n not in ocupados_actuales]
+                    
+                    if len(disponibles_reales) < cant_azar:
+                        st.error(f"Solo quedan {len(disponibles_reales)} cartones libres.")
                     else:
-                        seleccionados = sorted(random.sample(disponibles, cant_azar))
+                        seleccionados = sorted(random.sample(disponibles_reales, cant_azar))
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), "Cliente Rápido", ", ".join(map(str, seleccionados)), cant_azar, "Pendiente por Cancelar", ""))
                         conn.commit()
                         conn.close()
-                        st.success(f"¡Asignados {cant_azar} cartones!")
+                        st.success(f"¡Asignados {cant_azar} cartones disponibles al azar!")
                         st.rerun()
                 
                 st.markdown("---")
