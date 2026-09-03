@@ -36,12 +36,20 @@ def init_db():
 
 init_db()
 
-# Estilos CSS personalizados para mantener el tono oscuro y elegante
+# Estilos CSS personalizados para mantener el tono oscuro y reducir el tamaño de los botones del menú
 st.markdown("""
     <style>
     .main { background-color: #0f172a; color: #f8fafc; }
     .stTextInput input, .stNumberInput input { background-color: #1e293b; color: white; border: 1px solid #334155; }
     section[data-testid="stSidebar"] { background-color: #0b1120; }
+    
+    /* Reducir tamaño y padding de los botones específicos de la barra lateral */
+    section[data-testid="stSidebar"] div.stButton > button {
+        padding: 4px 10px !important;
+        font-size: 13px !important;
+        min-height: 32px !important;
+        border-radius: 5px !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -80,7 +88,6 @@ def generar_imagen_base64(libres):
     try:
         font_title = ImageFont.truetype("arial.ttf", 22)
         font_subtitle = ImageFont.truetype("arial.ttf", 14)
-        # Forzamos arialbd.ttf para asegurar la negrita real en los disponibles
         font_grid_bold = ImageFont.truetype("arialbd.ttf", 14) 
         font_grid_normal = ImageFont.truetype("arial.ttf", 13)
     except:
@@ -103,12 +110,10 @@ def generar_imagen_base64(libres):
         y2 = y1 + cell_h
         
         if n in libres:
-            # Disponible: Fondo blanco, borde definido, texto en negro puro y fuente en negrita
             draw.rectangle([x1, y1, x2, y2], fill="#FFFFFF", outline="#94a3b8", width=1)
             color_texto = "#000000"
             font_usada = font_grid_bold
         else:
-            # Ocupado: Fondo muy tenue y transparente/claro, texto gris translúcido
             draw.rectangle([x1, y1, x2, y2], fill="#f8fafc", outline="#e2e8f0", width=1)
             color_texto = "#cbd5e1"
             font_usada = font_grid_normal
@@ -127,7 +132,7 @@ def generar_imagen_base64(libres):
     buf.seek(0)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-# Menú lateral fijo en la barra lateral con opciones una debajo de otra (sin desplegables)
+# Menú lateral fijo en la barra lateral con botones estilizados más compactos
 with st.sidebar:
     st.markdown("### 🧭 Menú de Navegación")
     st.markdown("---")
@@ -161,7 +166,6 @@ with col_head4:
     libres_actuales = [n for n in range(1, 631) if n not in cartones_ocupados]
     img_b64 = generar_imagen_base64(cartones_ocupados)
     
-    # Componente web usando string normal y .replace() para evitar conflictos de llaves con f-strings
     html_code = """
     <div style="margin: 0; padding: 0;">
         <button id="btnCopiarImg" onclick="copiarImagen()" style="
@@ -230,7 +234,6 @@ if menu_seleccionado == "📊 Resumen General":
 elif menu_seleccionado == "📋 Ventas y Registro":
     with st.expander("➕ Opciones de Registro y Asignación Rápida", expanded=True):
         
-        # Fila Superior: Registro Manual como protagonista principal
         st.markdown("##### ➕ Registrar Manual")
         with st.form("form_nuevo"):
             col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
@@ -262,7 +265,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
         st.divider()
 
-        # Fila Inferior: Importar desde WhatsApp y Acciones al Azar / Borrar
         col_inf1, col_inf2 = st.columns(2)
         
         with col_inf1:
@@ -348,7 +350,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
     st.divider()
 
-    # Filtrar filas según la barra de búsqueda
     filas_filtradas = []
     for r in filas_db:
         id_r, fecha, cliente, numeros, cantidad, estado, referencia = r
