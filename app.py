@@ -60,7 +60,7 @@ for _, _, _, numeros, _, _, _ in filas_db:
     for n in re.findall(r"\b\d+\b", numeros):
         cartones_ocupados.add(int(n))
 
-# Función para generar la imagen en base64 para copiar directamente al portapapeles con un botón web
+# Función para generar la imagen en base64 (números libres en negrita, ocupados translúcidos/claros)
 def generar_imagen_base64(libres):
     cols = 15
     total_items = 630
@@ -80,9 +80,10 @@ def generar_imagen_base64(libres):
     try:
         font_title = ImageFont.truetype("arial.ttf", 22)
         font_subtitle = ImageFont.truetype("arial.ttf", 14)
-        font_grid = ImageFont.truetype("arialbd.ttf", 13)
+        font_grid_bold = ImageFont.truetype("arialbd.ttf", 13) # Negrita para los disponibles (libres)
+        font_grid_normal = ImageFont.truetype("arial.ttf", 13)  # Normal/translúcido para los ocupados
     except:
-        font_title = font_subtitle = font_grid = ImageFont.load_default()
+        font_title = font_subtitle = font_grid_bold = font_grid_normal = ImageFont.load_default()
         
     draw.rectangle([0, 0, img_w, header_h], fill="#1e293b")
     draw.text((margin, 20), "🎴 CARTONES DISPONIBLES (1 - 630)", fill="#FFFFFF", font=font_title)
@@ -101,20 +102,24 @@ def generar_imagen_base64(libres):
         y2 = y1 + cell_h
         
         if n in libres:
+            # Libre: Fondo blanco, texto negro en negrita
             draw.rectangle([x1, y1, x2, y2], fill="#FFFFFF", outline="#cbd5e1", width=1)
             color_texto = "#000000"
+            font_usada = font_grid_bold
         else:
+            # Ocupado: Fondo gris claro, texto gris claro (translúcido) en grosor normal
             draw.rectangle([x1, y1, x2, y2], fill="#f1f5f9", outline="#e2e8f0", width=1)
             color_texto = "#cbd5e1"
+            font_usada = font_grid_normal
             
         text = str(n)
-        bbox = draw.textbbox((0, 0), text, font=font_grid)
+        bbox = draw.textbbox((0, 0), text, font=font_usada)
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
         tx = x1 + (cell_w - tw) / 2
         ty = y1 + (cell_h - th) / 2
         
-        draw.text((tx, ty), text, fill=color_texto, font=font_grid)
+        draw.text((tx, ty), text, fill=color_texto, font=font_usada)
         
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -376,7 +381,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
                         
                         if st.form_submit_button("Guardar"):
-                            nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
+                            nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) al 1 <= int(n) <= 630]
                             if not nuevo_cliente.strip():
                                 st.error("El cliente no puede estar vacío.")
                             elif not nums_val_edit:
