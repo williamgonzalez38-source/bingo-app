@@ -281,17 +281,11 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         
         with col_inf1:
             st.markdown("##### 📥 Importar Directo desde WhatsApp")
-            
-            if "wpp_reset_counter" not in st.session_state:
-                st.session_state["wpp_reset_counter"] = 0
-
-            wpp_key = f"input_texto_wpp_{st.session_state['wpp_reset_counter']}"
 
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
                     "Pega aquí todo lo resaltado en WhatsApp", 
-                    placeholder="Pega aquí (Nombre del contacto arriba + mensaje abajo)...",
-                    key=wpp_key
+                    placeholder="Pega aquí (Nombre del contacto arriba + mensaje abajo)..."
                 )
                 
                 col_btn_w1, col_btn_w2 = st.columns(2)
@@ -301,41 +295,28 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     btn_borrar_wpp = st.form_submit_button("🗑️ Borrar", use_container_width=True)
                 
                 if btn_borrar_wpp:
-                    st.session_state["wpp_reset_counter"] += 1
                     st.rerun()
                 
                 if btn_wpp:
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
+                        # Dividir el texto en líneas limpias
                         lineas_crudas = texto_wpp_unificado.split('\n')
-                        lineas = []
-                        for l in lineas_crudas:
-                            # Limpieza profunda de espacios invisibles
-                            l_limpia = l.strip()
-                            if l_limpia:
-                                if not re.fullmatch(r'[\d:\s]+(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l_limpia, re.IGNORECASE):
-                                    lineas.append(l_limpia)
+                        lineas = [l.strip() for l in lineas_crudas if l.strip()]
 
-                        # --- EXTRACCIÓN ROBUSTA Y DIRECTA DE LA PRIMERA LÍNEA (NOMBRE) ---
+                        # --- EXTRACCIÓN INFALIBLE: LÍNEA 1 = NOMBRE, RESTO = MENSAJE ---
                         nombre_cliente = "Cliente WhatsApp"
                         cuerpo_busqueda = texto_wpp_unificado
 
                         if len(lineas) >= 1:
-                            # La primera línea obligatoriamente se toma como el nombre del contacto resaltado (ej: Alejandra)
-                            candidato_nombre = lineas[0]
-                            candidato_nombre = re.sub(r'\[.*?\]', '', candidato_nombre).strip()
-                            candidato_nombre = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', candidato_nombre, flags=re.IGNORECASE).strip()
-                            
-                            if candidato_nombre and len(candidato_nombre) > 0:
-                                nombre_cliente = candidato_nombre
-                                # El resto del contenido pasa a ser el mensaje para buscar los números o la cantidad al azar
-                                if len(lineas) > 1:
-                                    cuerpo_busqueda = " ".join(lineas[1:])
-                            elif len(lineas) > 1:
-                                nombre_cliente = lineas[1].strip()
-                                if len(lineas) > 2:
-                                    cuerpo_busqueda = " ".join(lineas[2:])
+                            # Forzar que la primera línea sea estrictamente el nombre del contacto (Ej: Alejandra)
+                            nombre_cliente = lineas[0]
+                            # El resto de líneas se combinan para buscar el pedido (Ej: Buenas tardes 65 números al azar)
+                            if len(lineas) > 1:
+                                cuerpo_busqueda = " ".join(lineas[1:])
+                            else:
+                                cuerpo_busqueda = lineas[0]
 
                         # Detección de cartones o peticiones al azar en el cuerpo del mensaje
                         nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_busqueda) if 1 <= int(n) <= 630]
@@ -343,10 +324,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname"]) or len(nums_wpp) <= 2 and any(c in texto_lower for c in ["carton", "cartones", "anotame", "inscribeme"])
 
                         cantidad_solicitada = 0
-                        if pide_azar or len(nums_wpp) == 1 and int(nums_wpp[0]) <= 100:
+                        if pide_azar or len(nums_wpp) == 1 and int(nums_wpp[0]) <= 200:
                             for palabra in re.findall(r'\b\d+\b', cuerpo_busqueda):
                                 val_num = int(palabra)
-                                if val_num <= 630: # Ampliado para capturar números grandes como 65 sin problemas
+                                if val_num <= 630: # Captura correcta de números grandes como 65
                                     cantidad_solicitada = val_num
                                     break
 
@@ -384,7 +365,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             conn.commit()
                             conn.close()
                             
-                            st.session_state["wpp_reset_counter"] += 1
                             st.success(f"¡Registrado! Contacto: {nombre_cliente} | Cartones: {len(nums_wpp)}")
                             st.rerun()
 
