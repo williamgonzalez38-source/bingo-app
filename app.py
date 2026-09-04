@@ -280,7 +280,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         col_inf1, col_inf2 = st.columns(2)
         
         with col_inf1:
-            st.markdown("##### 📥 Importar Selección Múltiple de WhatsApp")
+            st.markdown("##### 📥 Importar Selección Múltiple de WhatsApp (Secuencial en Cascada)")
 
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
@@ -303,8 +303,18 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     else:
                         lineas = texto_wpp_unificado.split('\n')
                         registros_exitosos = 0
+                        
+                        # Cargar ocupados actuales de la base de datos para arrancar la cascada
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
+                        c.execute("SELECT numeros FROM ventas")
+                        filas_actuales = c.fetchall()
+                        ocupados_en_memoria = set()
+                        for f_nums, in filas_actuales:
+                            for n in re.findall(r"\b\d+\b", f_nums):
+                                ocupados_en_memoria.add(int(n))
+
+                        reporte_procesamiento = []
 
                         for linea in lineas:
                             linea_s = linea.strip()
@@ -314,67 +324,91 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             nombre_cliente = ""
                             cuerpo_mensaje = ""
 
-                            # 1. Intentar detectar formato completo de chat de WhatsApp con corchetes: [hora, fecha] Nombre: Mensaje
+                            # 1. Detectar formato con corchetes [hora, fecha] Nombre: Mensaje
                             match_chat = re.search(r'\[.*?\]\s*([^:]+):\s*(.*)', linea_s)
                             if match_chat:
                                 nombre_cliente = match_chat.group(1).strip()
                                 cuerpo_mensaje = match_chat.group(2).strip()
                             else:
-                                # 2. Intentar detectar formato de un solo contacto copiado sin corchetes pero con nombre y dos puntos (Ej: Marianny Gutierrez: 65 - 71)
+                                # 2. Detectar formato simple con nombre y dos puntos (Ej: Marianny Gutierrez: 65 - 71)
                                 match_simple = re.search(r'^([^:]+):\s*(.*)', linea_s)
                                 if match_simple and not linea_s.startswith("http") and len(match_simple.group(1).split()) <= 4:
                                     nombre_cliente = match_simple.group(1).strip()
                                     cuerpo_mensaje = match_simple.group(2).strip()
                                 else:
-                                    # Si no tiene estructura de nombre, se toma como mensaje directo
                                     nombre_cliente = "Cliente WhatsApp"
                                     cuerpo_mensaje = linea_s
 
-                            # Extraer números válidos de cartón (1 a 630)
+                            # Extraer números del mensaje
                             todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
                             
-                            # Aislar referencia bancaria de 6 dígitos si existe para evitar que se tome como cartón
+                            # Aislar referencia bancaria de 6 dígitos si existe
                             ref_wpp_match = re.search(r"\b\d{6}\b", cuerpo_mensaje)
                             ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
-                            nums_wpp = [str(n) for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3]
+                            # Filtrar solo rango válido (1-630) y descartar la referencia si coincide
+                            candidatos_num = [n for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3]
                             if ref_wpp:
-                                nums_wpp = [n for n in nums_wpp if n != ref_wpp]
+                                candidatos_num = [n for n in candidatos_num if str(n) != ref_wpp]
 
-                            # Si no vinieron números explícitos pero dice palabras de azar o cantidad
+                            # Verificar cuáles solicitados están ocupados ya en memoria (en cascada)
+                            cartones_asignados = []
+                            cartones_no_disponibles = []
+
+                            # Ver si pide al azar
                             texto_lower = cuerpo_mensaje.lower()
                             pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme", "necesito"])
                             
                             cantidad_solicitada = 0
-                            if pide_azar or (len(todos_numeros) == 1 and todos_numeros[0] <= 100):
-                                for n_val in todos_numeros:
+                            if pide_azar or (len(candidatos_num) == 1 and candidatos_num[0] <= 100):
+                                for n_val in candidatos_num:
                                     if n_val <= 630:
                                         cantidad_solicitada = n_val
                                         break
 
-                            if (pide_azar and cantidad_solicitada > 0) or (len(nums_wpp) <= 1 and cantidad_solicitada > 1):
-                                c.execute("SELECT numeros FROM ventas")
-                                filas_actuales = c.fetchall()
-                                ocupados_actuales = set()
-                                for f_nums, in filas_actuales:
-                                    for n in re.findall(r"\b\d+\b", f_nums):
-                                        ocupados_actuales.add(int(n))
-                                
-                                disponibles_reales = [n for n in range(1, 631) if n not in ocupados_actuales]
+                            if (pide_azar and cantidad_solicitada > 0) or (len(candidatos_num) <= 1 and cantidad_solicitada > 1):
+                                disponibles_reales = [n for n in range(1, 631) if n not in ocupados_en_memoria]
                                 if len(disponibles_reales) >= cantidad_solicitada:
-                                    nums_wpp = [str(n) for n in sorted(random.sample(disponibles_reales, cantidad_solicitada))]
+                                    cartones_asignados = sorted(random.sample(disponibles_reales, cantidad_solicitada))
+                            else:
+                                for num_req in candidatos_num:
+                                    if num_req not in ocupados_en_memoria:
+                                        cartones_asignados.append(num_req)
+                                    else:
+                                        cartones_no_disponibles.append(num_req)
 
-                            if nums_wpp:
+                            # Si se pudieron asignar cartones, guardamos e incrementamos la memoria en cascada
+                            if cartones_asignados:
+                                nums_str = [str(n) for n in cartones_asignados]
+                                for n in cartones_asignados:
+                                    ocupados_en_memoria.add(n) # Actualiza la memoria interna al instante para el siguiente
+
                                 estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                                 c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                          (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
+                                          (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_str), len(nums_str), estado_reg, ref_wpp))
                                 registros_exitosos += 1
+
+                            # Registrar detalle para el reporte de la sesión
+                            reporte_procesamiento.append({
+                                "cliente": nombre_cliente,
+                                "asignados": cartones_asignados,
+                                "no_disponibles": cartones_no_disponibles
+                            })
 
                         conn.commit()
                         conn.close()
 
                         if registros_exitosos > 0:
-                            st.success(f"¡Se registraron exitosamente {registros_exitosos} registros con sus nombres y cartones!")
+                            st.success(f"¡Proceso en cascada completado! Se registraron {registros_exitosos} clientes verificando disponibilidad previa.")
+                            
+                            # Mostrar desglose y opciones para copiar cartones no disponibles o sugerir libres
+                            st.markdown("##### 📋 Reporte de Verificación Secuencial:")
+                            for rep in reporte_procesamiento:
+                                txt_asig = ", ".join(map(str, rep["asignados"])) if rep["asignados"] else "Ninguno"
+                                txt_no_disp = ", ".join(map(str, rep["no_disponibles"])) if rep["no_disponibles"] else "Ninguno (todos disponibles)"
+                                
+                                st.info(f"**👤 {rep['cliente']}** ➔ Asignados: [{txt_asig}] | ❌ No disponibles (ocupados previamente): [{txt_no_disp}]")
+                            
                             st.rerun()
                         else:
                             st.error("No se pudieron extraer datos válidos o cartones de los chats seleccionados.")
