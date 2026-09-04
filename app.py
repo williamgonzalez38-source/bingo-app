@@ -379,6 +379,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 ocupados_en_memoria.add(int(n))
 
                         pendientes_cola = []
+                        ultimo_cliente = ""
 
                         for linea in lineas:
                             linea_s = linea.strip()
@@ -398,8 +399,16 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     nombre_cliente = match_simple.group(1).strip()
                                     cuerpo_mensaje = match_simple.group(2).strip()
                                 else:
-                                    nombre_cliente = "Cliente WhatsApp"
-                                    cuerpo_mensaje = linea_s
+                                    # Si no tiene formato de nombre y tenemos un cliente anterior en memoria, asumimos que es un mensaje consecutivo suyo (ej: un segundo número enviado abajo)
+                                    if ultimo_cliente:
+                                        nombre_cliente = ultimo_cliente
+                                        cuerpo_mensaje = linea_s
+                                    else:
+                                        nombre_cliente = "Cliente WhatsApp"
+                                        cuerpo_mensaje = linea_s
+
+                            if nombre_cliente and nombre_cliente != "Cliente WhatsApp":
+                                ultimo_cliente = nombre_cliente
 
                             ref_wpp_match = re.search(r"\b\d{6,}\b", cuerpo_mensaje)
                             if not ref_wpp_match:
@@ -644,7 +653,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                 col_acc1, col_acc2 = st.columns(2)
                 with col_acc1:
                     if st.button("✔️", key=f"procesar_{id_r}", help="Marcar como procesado y ocultar"):
-                        # Elimina las notificaciones de WhatsApp asociadas a este cliente para que desaparezca de la vista de pendientes
                         if "pendientes_pendientes_wpp" in st.session_state:
                             st.session_state["pendientes_pendientes_wpp"] = [
                                 n for n in st.session_state["pendientes_pendientes_wpp"] 
