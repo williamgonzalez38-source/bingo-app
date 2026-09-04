@@ -8,13 +8,6 @@ from PIL import Image, ImageDraw, ImageFont
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Importar pytesseract para lectura de imágenes (OCR)
-try:
-    import pytesseract
-    OCR_DISPONIBLE = True
-except ImportError:
-    OCR_DISPONIBLE = False
-
 # Configuración de página web ancha y moderna
 st.set_page_config(
     page_title="Control de Jugadores y Cartones - Bingo",
@@ -72,7 +65,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Obtener datos de la base de datos ordenados del más reciente al más antiguo (ID descendiente)
+# Obtener datos de la base de datos ordenados del más reciente al más antiguo
 def obtener_ventas():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -102,7 +95,7 @@ def obtener_fuente(size):
             continue
     return ImageFont.load_default()
 
-# Función para generar la imagen con números ocupados en tono translúcido/atenuado (#e2e8f0)
+# Función para generar la imagen con números ocupados en tono translúcido (#e2e8f0)
 def generar_imagen_base64(libres):
     cols = 20  # 20 columnas exactas por fila
     total_items = 630
@@ -117,7 +110,6 @@ def generar_imagen_base64(libres):
     img_w = (cols * col_w) + (margin_x * 2)
     img_h = (rows * row_h) + (margin_y * 2) + header_h
     
-    # Fondo general blanco puro
     img = Image.new("RGB", (img_w, img_h), color="#FFFFFF")
     draw = ImageDraw.Draw(img)
     
@@ -149,7 +141,7 @@ def generar_imagen_base64(libres):
     buf.seek(0)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-# Menú lateral ultra angosta con botones cuadrados compactos y tooltips
+# Menú lateral ultra angosta
 with st.sidebar:
     st.markdown("### 🧭 Menú")
     st.markdown("---")
@@ -175,7 +167,7 @@ with st.sidebar:
 
 menu_seleccionado = st.session_state["menu_activo"]
 
-# Cabecera superior: Buscador, Precio y el botón funcional para copiar imagen al portapapeles con 1 clic
+# Cabecera superior
 st.markdown("### 🎴 Control de Jugadores y Cartones")
 
 col_head1, col_head2, col_head3, col_head4 = st.columns([2.2, 1.2, 1.2, 1.4])
@@ -254,7 +246,7 @@ if menu_seleccionado == "📊 Resumen General":
 
 elif menu_seleccionado == "🗃️ Historial Definitivo":
     st.markdown("#### 🗃️ Historial de Todos los Registros Definitivos")
-    st.caption("Aquí puedes consultar de forma permanente todos los registros que se han ido guardando en el sistema.")
+    st.caption("Consulta permanente de todos los registros guardados.")
 
     filas_historial = obtener_ventas()
     if busqueda:
@@ -285,7 +277,7 @@ elif menu_seleccionado == "🗃️ Historial Definitivo":
 
 elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### 🎟️ Matriz Visual de Cartones (1 al 630)")
-    st.caption("Los números en color claro o atenuado ya se encuentran ocupados por algún jugador.")
+    st.caption("Los números en color claro o atenuado ya se encuentran ocupados.")
     libres_grid = [n for n in range(1, 631) if n not in cartones_ocupados]
     img_b64_full = generar_imagen_base64(libres_grid)
     st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{img_b64_full}" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"></div>', unsafe_allow_html=True)
@@ -293,91 +285,7 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
 elif menu_seleccionado == "📋 Ventas y Registro":
     with st.expander("➕ Opciones de Registro Rápido", expanded=True):
         
-        # --- SECCIÓN: Lector OCR de Pago Móvil con Coincidencia Automática de Cliente ---
-        st.markdown("##### 📸 Lector Automático de Pago Móvil (Captura)")
-        with st.container(border=True):
-            img_pago_subida = st.file_uploader("Sube la captura del pago móvil (PNG o JPG)", type=["png", "jpg", "jpeg"], key="uploader_pago_movil")
-            
-            if img_pago_subida:
-                if not OCR_DISPONIBLE:
-                    st.error("La librería 'pytesseract' no está instalada en el entorno.")
-                else:
-                    try:
-                        imagen_pil = Image.open(img_pago_subida)
-                        texto_extraido = pytesseract.image_to_string(imagen_pil)
-                        
-                        # Extraer referencia (últimos 6 dígitos)
-                        matches_ref = re.findall(r"\b\d{6}\b", texto_extraido)
-                        if not matches_ref:
-                            matches_ref = re.findall(r"\b\d{4,8}\b", texto_extraido)
-                        ref_detectada = matches_ref[-1][-6:] if matches_ref else ""
-                        
-                        # Buscar clientes pendientes en la BD para relacionarlos con el texto OCR
-                        conn = sqlite3.connect(DB_NAME)
-                        c = conn.cursor()
-                        c.execute("SELECT id, cliente, numeros, cantidad, referencia FROM ventas WHERE estado = 'Pendiente por Cancelar'")
-                        pendientes_db = c.fetchall()
-                        conn.close()
-                        
-                        cliente_encontrado = None
-                        texto_lower = texto_extraido.lower()
-                        for id_p, cli_p, nums_p, cant_p, ref_p in pendientes_db:
-                            nombre_partes = cli_p.lower().split()
-                            if any(parte in texto_lower for parte in nombre_partes if len(parte) > 2):
-                                cliente_encontrado = (id_p, cli_p, nums_p, cant_p)
-                                break
-                        
-                        if ref_detectada and cliente_encontrado:
-                            id_c, nombre_c, nums_c, cant_c = cliente_encontrado
-                            monto_c = cant_c * precio_unitario
-                            
-                            if "aprobaciones_ocr_pendientes" not in st.session_state:
-                                st.session_state["aprobaciones_ocr_pendientes"] = []
-                            
-                            nueva_aprob = {"id": id_c, "cliente": nombre_c, "ref": ref_detectada, "monto": monto_c, "numeros": nums_c}
-                            if nueva_aprob not in st.session_state["aprobaciones_ocr_pendientes"]:
-                                st.session_state["aprobaciones_ocr_pendientes"].append(nueva_aprob)
-                            
-                            st.success(f"¡Coincidencia encontrada! Cliente: **{nombre_c}** | Ref: **{ref_detectada}** (Revisa abajo para dar el visto bueno)")
-                        elif ref_detectada:
-                            st.success(f"Referencia extraída: **{ref_detectada}** (No se asoció automáticamente a ningún pendiente, úsala en el formulario)")
-                            st.session_state["ref_ocr_autocompletada"] = ref_detectada
-                        else:
-                            st.warning("No se pudo detectar la referencia en la imagen.")
-                    except Exception as e:
-                        st.error(f"Error al procesar la imagen: {e}")
-
-        # --- PANEL DE APROBACIONES PENDIENTES OCR ---
-        aprobaciones_pendientes = st.session_state.get("aprobaciones_ocr_pendientes", [])
-        if aprobaciones_pendientes:
-            st.markdown("---")
-            st.markdown("##### 🔔 Aprobaciones Pendientes por Coincidencia OCR")
-            for ap in list(aprobaciones_pendientes):
-                with st.container(border=True):
-                    col_ap1, col_ap2, col_ap3 = st.columns([2.5, 1.5, 1])
-                    with col_ap1:
-                        st.write(f"**👤 {ap['cliente']}** (Cartones: `{ap['numeros']}`)")
-                        st.caption(f"Ref detectada: `{ap['ref']}` | Monto a Cancelar: **Bs. {ap['monto']:,.2f}**")
-                    with col_ap2:
-                        if st.button("✅ Dar Visto Bueno (Cancelar)", key=f"aprobar_ocr_{ap['id']}_{ap['ref']}", use_container_width=True):
-                            conn = sqlite3.connect(DB_NAME)
-                            c = conn.cursor()
-                            c.execute("UPDATE ventas SET referencia=?, estado='Cancelado' WHERE id=?", (ap['ref'], ap['id']))
-                            conn.commit()
-                            conn.close()
-                            st.session_state["aprobaciones_ocr_pendientes"].remove(ap)
-                            st.success(f"¡Pago de {ap['cliente']} aprobado y marcado como Cancelado!")
-                            st.rerun()
-                    with col_ap3:
-                        if st.button("❌ Descartar", key=f"descartar_ocr_{ap['id']}_{ap['ref']}", use_container_width=True):
-                            st.session_state["aprobaciones_ocr_pendientes"].remove(ap)
-                            st.rerun()
-
         st.markdown("##### ➕ Registrar Manual")
-        
-        # Obtener referencia sugerida por OCR si existe
-        ref_sugerida = st.session_state.get("ref_ocr_autocompletada", "")
-        
         with st.form("form_nuevo"):
             col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
             with col_f1:
@@ -385,7 +293,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             with col_f2:
                 nums_input = st.text_input("Cartones (Ej: 12, 45, 100)")
             with col_f3:
-                ref_input = st.text_input("Últimos 6 dígitos", value=ref_sugerida, max_chars=6)
+                ref_input = st.text_input("Últimos 6 dígitos", max_chars=6)
             
             submitted = st.form_submit_button("Guardar Registro")
             
@@ -414,7 +322,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             "nuevos_no_disponibles": [n for n in nums_val if n in cartones_ocupados],
                             "ref": ref_limpia
                         })
-                        st.warning(f"⚠️ El cliente '{cli_input.strip()}' ya existe. Se ha registrado la alerta en su tarjeta abajo.")
+                        st.warning(f"⚠️ El cliente '{cli_input.strip()}' ya existe. Se registró la alerta abajo.")
                     else:
                         estado_reg = "Cancelado" if ref_limpia else "Pendiente por Cancelar"
                         nums_str = ", ".join(map(str, sorted(set(nums_val))))
@@ -424,8 +332,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), nums_str, len(set(nums_val)), estado_reg, ref_limpia))
                         conn.commit()
                         conn.close()
-                        if "ref_ocr_autocompletada" in st.session_state:
-                            del st.session_state["ref_ocr_autocompletada"]
                         st.success("¡Cliente registrado con éxito!")
                         st.rerun()
 
@@ -443,14 +349,14 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
-                    "Pega aquí la selección de WhatsApp (uno o varios contactos)", 
+                    "Pega aquí la selección de WhatsApp", 
                     key=key_text_area,
                     placeholder="Pega aquí el texto copiado de WhatsApp..."
                 )
                 
                 col_btn_w1, col_btn_w2 = st.columns(2)
                 with col_btn_w1:
-                    btn_wpp = st.form_submit_button("Procesar e Integrar en el Listado", use_container_width=True)
+                    btn_wpp = st.form_submit_button("Procesar", use_container_width=True)
                 with col_btn_w2:
                     btn_borrar_wpp = st.form_submit_button("🗑️ Borrar", use_container_width=True)
                 
@@ -463,7 +369,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         st.warning("El campo de texto está vacío.")
                     else:
                         lineas = texto_wpp_unificado.split('\n')
-                        
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
                         c.execute("SELECT numeros FROM ventas")
@@ -502,11 +407,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             
                             ref_wpp = ""
                             if ref_wpp_match:
-                                ref_completa = ref_wpp_match.group(0)
-                                ref_wpp = ref_completa[-6:]
+                                ref_wpp = ref_wpp_match.group(0)[-6:]
 
                             texto_lower = cuerpo_mensaje.lower()
-                            
                             palabras_clave_azar = ["azar", "aleatorio", "ocupados", "si no", "o al azar"]
                             pide_azar = any(palabra in texto_lower for palabra in palabras_clave_azar)
 
@@ -527,9 +430,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                             cantidad_azar_solicitada = nums_antes[-1]
                                             if cantidad_azar_solicitada in candidatos_num:
                                                 candidatos_num.remove(cantidad_azar_solicitada)
-                                        elif len(candidatos_num) == 1 and candidatos_num[0] <= 20:
-                                            cantidad_azar_solicitada = candidatos_num[0]
-                                            candidatos_num = []
                                         break
 
                             cartones_asignados = []
@@ -569,15 +469,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     "ref": ref_wpp
                                 })
                             else:
-                                if cartones_asignados and not cartones_no_disponibles:
-                                    for n in cartones_asignados:
-                                        ocupados_en_memoria.add(n)
-
-                                    estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
-                                    c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                              (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, sorted(cartones_asignados))), len(cartones_asignados), estado_reg, ref_wpp))
-                                
-                                elif cartones_asignados and cartones_no_disponibles:
+                                if cartones_asignados:
                                     for n in cartones_asignados:
                                         ocupados_en_memoria.add(n)
 
@@ -585,13 +477,14 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
                                               (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, sorted(cartones_asignados))), len(cartones_asignados), estado_reg, ref_wpp))
                                     
-                                    pendientes_cola.append({
-                                        "tipo": "solo_no_disponibles",
-                                        "cliente": nombre_cliente,
-                                        "no_disponibles": cartones_no_disponibles,
-                                        "ref": ref_wpp
-                                    })
-                                elif cartones_no_disponibles and not cartones_asignados:
+                                    if cartones_no_disponibles:
+                                        pendientes_cola.append({
+                                            "tipo": "solo_no_disponibles",
+                                            "cliente": nombre_cliente,
+                                            "no_disponibles": cartones_no_disponibles,
+                                            "ref": ref_wpp
+                                        })
+                                elif cartones_no_disponibles:
                                     pendientes_cola.append({
                                         "tipo": "solo_no_disponibles",
                                         "cliente": nombre_cliente,
@@ -607,7 +500,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             st.session_state["pendientes_pendientes_wpp"] = []
                         st.session_state["pendientes_pendientes_wpp"].extend(pendientes_cola)
                         
-                        st.success("¡Chats procesados correctamente!")
+                        st.success("¡Chats procesados!")
                         st.rerun()
 
         with col_inf2:
@@ -638,7 +531,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), "Cliente Rápido", ", ".join(map(str, seleccionados)), cant_azar, "Pendiente por Cancelar", ""))
                         conn.commit()
                         conn.close()
-                        st.success(f"¡Asignados y guardados {cant_azar} cartones al azar!")
+                        st.success(f"¡Asignados {cant_azar} cartones al azar!")
                         st.rerun()
                 
                 st.markdown("---")
@@ -650,14 +543,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     conn.close()
                     if "pendientes_pendientes_wpp" in st.session_state:
                         st.session_state["pendientes_pendientes_wpp"] = []
-                    if "aprobaciones_ocr_pendientes" in st.session_state:
-                        st.session_state["aprobaciones_ocr_pendientes"] = []
-                    st.success("¡Base de datos borrada por completo con éxito!")
+                    st.success("¡Base de datos borrada!")
                     st.rerun()
 
     st.divider()
 
-    # Recargar filas de base de datos actualizadas (ordenadas del más nuevo al más antiguo)
+    # Recargar filas
     filas_db = obtener_ventas()
     filas_filtradas = []
     for r in filas_db:
@@ -685,7 +576,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                 st.caption(f"Cartones: {numeros} ({cant_cartones} unid.)")
                 st.markdown(f"💰 **Total: Bs. {monto_total:,.2f}**")
                 
-                # --- ALERTA EXACTAMENTE ABAJO DEL MONTO EN BOLÍVARES ---
                 for notif_asociada in notif_asociadas:
                     tipo_n = notif_asociada["tipo"]
                     
@@ -734,41 +624,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 st.markdown(f"🚫 **No disponible:** `{texto_copiable}`")
                             with cols_s2:
                                 if st.button("❌ Borrar Notif.", key=f"cerrar_solo_{id_r}_{random.randint(100,999)}", use_container_width=True):
-                                    if notif_asociada in st.session_state["pendientes_pendientes_wpp"]:
-                                        st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
-                                    st.rerun()
-
-                    elif tipo_n == "pendiente_azar":
-                        cols_az1, cols_az2 = st.columns([2, 1])
-                        with cols_az1:
-                            st.caption(f"🎲 Azar pedido: {notif_asociada['cantidad']} un.")
-                        with cols_az2:
-                            if st.button("🎲 Asignar", key=f"btn_azar_{id_r}", use_container_width=True):
-                                conn = sqlite3.connect(DB_NAME)
-                                c = conn.cursor()
-                                c.execute("SELECT numeros FROM ventas")
-                                filas_actuales = c.fetchall()
-                                ocupados_en_memoria = set()
-                                for f_nums, in filas_actuales:
-                                    for n in re.findall(r"\b\d+\b", f_nums):
-                                        ocupados_en_memoria.add(int(n))
-                                disponibles = [n for n in range(1, 631) if n not in ocupados_en_memoria]
-                                if len(disponibles) < notif_asociada['cantidad']:
-                                    st.error("No hay suficientes cartones libres.")
-                                    conn.close()
-                                else:
-                                    seleccionados = sorted(random.sample(disponibles, notif_asociada['cantidad']))
-                                    nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
-                                    cartones_combinados = sorted(list(set(nums_db_lista + seleccionados)))
-                                    nums_combinados_str = ", ".join(map(str, cartones_combinados))
-                                    ref_final = referencia if referencia else notif_asociada['ref']
-                                    estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
-                                    
-                                    c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                              (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_r))
-                                    conn.commit()
-                                    conn.close()
-                                    
                                     if notif_asociada in st.session_state["pendientes_pendientes_wpp"]:
                                         st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                     st.rerun()
