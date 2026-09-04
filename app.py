@@ -375,6 +375,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
+                        # División estricta por bloques de mensajes en WhatsApp
                         bloques_mensajes = re.split(r'\n(?=\s*\[|\b[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+\s*:)', texto_wpp_unificado)
                         if not bloques_mensajes:
                             bloques_mensajes = [texto_wpp_unificado]
@@ -398,26 +399,25 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                             texto_lower = bloque_s.lower()
 
-                            # Extracción estricta y mejorada del nombre del contacto
+                            # Extracción definitiva y estricta del nombre del contacto
                             nombre_cliente = ""
                             
-                            # 1. Buscar patrón de WhatsApp tipo [Fecha] Nombre:
+                            # 1. Buscar formato de chat [Fecha/Hora] Nombre:
                             match_chat = re.search(r'\[.*?\]\s*([^:]+):', bloque_s)
                             if match_chat:
                                 nombre_cliente = match_chat.group(1).strip()
                             else:
-                                # 2. Buscar si la primera línea o inicio tiene un formato "Nombre:" estricto
+                                # 2. Buscar si la primera línea contiene Nombre:
                                 match_simple = re.search(r'^([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+):', bloque_s)
                                 if match_simple and len(match_simple.group(1).split()) <= 4:
                                     nombre_cliente = match_simple.group(1).strip()
                                 else:
-                                    # 3. Búsqueda estricta para un solo registro resaltado: tomar la primera línea si no tiene números o si es texto limpio
+                                    # 3. Forzar estricto: tomar la primera línea como nombre si es un texto limpio (1 a 4 palabras)
                                     lineas_bloque = [l.strip() for l in bloque_s.split('\n') if l.strip()]
                                     if lineas_bloque:
                                         primera_linea = lineas_bloque[0]
-                                        # Si la primera línea no contiene puros números y es corta (nombre de contacto)
+                                        # Si la línea no es solo números y tiene longitud razonable de nombre
                                         if not re.fullmatch(r'[\d,\s\-]+', primera_linea) and len(primera_linea.split()) <= 4:
-                                            # Limpiar corchetes de fecha si los trae sueltos
                                             primera_limpia = re.sub(r'\[.*?\]', '', primera_linea).replace(':', '').strip()
                                             if primera_limpia:
                                                 nombre_cliente = primera_limpia
@@ -427,6 +427,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             else:
                                 nombre_cliente = ultimo_cliente
 
+                            # Extracción de referencia
                             ref_wpp_match = re.search(r'(?:operación|operacion|ref|referencia)[:\s]*(\d{4,12})', texto_lower)
                             ref_wpp = ""
                             if ref_wpp_match:
@@ -436,9 +437,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 if match_nums_largos:
                                     ref_wpp = match_nums_largos[0][-6:]
 
+                            # Detección de cartones al azar
                             cantidad_azar_solicitada = 0
                             match_azar_cant = re.search(r'\b(\d+)\s*(?:cartones|carton|boletos|ticket)?\b', texto_lower)
-                            
                             if match_azar_cant and int(match_azar_cant.group(1)) <= 50:
                                 cantidad_azar_solicitada = int(match_azar_cant.group(1))
 
@@ -475,6 +476,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     })
                                 continue
 
+                            # Extracción normal de números (1 a 3 dígitos)
                             todos_numeros = [int(n) for n in re.findall(r"\b\d{1,3}\b", bloque_s)]
                             candidatos_num = []
                             seen_candidatos = set()
