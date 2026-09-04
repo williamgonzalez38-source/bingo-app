@@ -579,11 +579,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                         if notif_asociada.get('nuevos_no_disponibles'):
                             st.markdown("---")
-                            st.markdown("🔔 **Alerta 2: Números no disponibles (Ocupados)**")
-                            nums_ocupados_str = ", ".join(map(str, notif_asociada['nuevos_no_disponibles']))
-                            texto_copiable = f"Hola {cliente}, los siguientes cartones que pediste ya están ocupados: {nums_ocupados_str}. ¿Deseas otros al azar?"
+                            st.markdown("🔔 **Alerta 2: No disponible**")
+                            # Mensaje corto con únicamente los números ocupados
+                            texto_copiable = ", ".join(map(str, notif_asociada['nuevos_no_disponibles']))
                             
-                            st.warning("Los siguientes cartones solicitados ya están ocupados:")
                             st.code(texto_copiable, language="text")
                             
                             if st.button("🗑️ Cerrar Alerta 2", key=f"cerrar_ocupados_dupl_{id_r}", use_container_width=True):
@@ -700,11 +699,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                         if notif_asociada.get("no_disponibles"):
                             st.markdown("---")
-                            st.markdown("🔔 **Alerta 2: Números no disponibles (Ocupados)**")
-                            nums_ocupados_str = ", ".join(map(str, notif_asociada['no_disponibles']))
-                            texto_copiable = f"Hola {cliente}, los siguientes cartones que pediste ya están ocupados: {nums_ocupados_str}. ¿Deseas otros al azar?"
+                            st.markdown("🔔 **Alerta 2: No disponible**")
+                            # Mensaje corto con únicamente los números ocupados
+                            texto_copiable = ", ".join(map(str, notif_asociada['no_disponibles']))
                             
-                            st.warning("Los siguientes cartones solicitados ya están ocupados:")
                             st.code(texto_copiable, language="text")
                             
                             if st.button("🗑️ Cerrar Alerta 2", key=f"cerrar_ocupados_aviso_{id_r}", use_container_width=True):
@@ -826,12 +824,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             st.rerun()
 
                     if n_huerfana.get("no_disponibles"):
-                        st.markdown("🔔 **Alerta 2: Números no disponibles (Ocupados)**")
-                        cli_nombre_h = n_huerfana['cliente']
-                        nums_ocupados_str = ", ".join(map(str, n_huerfana['no_disponibles']))
-                        texto_copiable = f"Hola {cli_nombre_h}, los siguientes cartones que pediste ya están ocupados: {nums_ocupados_str}. ¿Deseas otros al azar?"
+                        st.markdown("🔔 **Alerta 2: No disponible**")
+                        # Mensaje corto con únicamente los números ocupados
+                        texto_copiable = ", ".join(map(str, n_huerfana['no_disponibles']))
                         
-                        st.warning("Los siguientes cartones solicitados ya están ocupados:")
                         st.code(texto_copiable, language="text")
                         
                         if st.button("🗑️ Cerrar Alerta 2", key=f"cerrar_ocupados_huerfana_{idx_h}", use_container_width=True):
