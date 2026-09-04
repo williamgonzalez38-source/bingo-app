@@ -267,14 +267,15 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
                     
-                    c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (cli_input.strip(),))
+                    # Búsqueda insensible a mayúsculas/minúsculas o espacios para unificar sin duplicar
+                    c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (cli_input.strip(),))
                     cliente_existente = c.fetchone()
                     
                     if cliente_existente:
                         id_existente, nums_existentes_str, ref_existente = cliente_existente
                         nums_existentes = [int(n) for n in re.findall(r"\b\d+\b", nums_existentes_str)]
                         
-                        nuevos_unicos = sorted(list(set(nums_existentes + nums_val)))
+                        nuevos_unicos = sorted(list(set(nums_existentes + [int(n) for n in nums_val])))
                         total_nums_combinados = len(nuevos_unicos)
                         nums_combinados_str = ", ".join(map(str, nuevos_unicos))
                         
@@ -283,10 +284,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         
                         c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
                                   (nums_combinados_str, total_nums_combinados, estado_reg_final, ref_final, id_existente))
-                        st.success(f"¡Cliente existente '{cli_input.strip()}' unificado y actualizado!")
+                        st.success(f"¡Cliente existente '{cli_input.strip()}' unificado y actualizado sin duplicar!")
                     else:
                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(nums_val), len(nums_val), estado_reg, ref_input.strip()))
+                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(map(str, sorted(list(set([int(n) for n in nums_val]))))), len(set(nums_val)), estado_reg, ref_input.strip()))
                         st.success("¡Cliente registrado con éxito!")
                         
                     conn.commit()
@@ -337,7 +338,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             for n in re.findall(r"\b\d+\b", f_nums):
                                 ocupados_en_memoria.add(int(n))
 
-                        # Lista que contendrá el análisis estructurado de cada cliente individualmente en orden exacto
                         clientes_procesados_cola = []
 
                         for linea in lineas:
@@ -366,7 +366,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                             texto_lower = cuerpo_mensaje.lower()
                             
-                            # Palabras clave ampliadas para detectar condiciones de reemplazo al azar
                             palabras_clave_azar = ["azar", "aleatorio", "ocupados", "si no", "o al azar"]
                             pide_azar = any(palabra in texto_lower for palabra in palabras_clave_azar)
 
@@ -392,7 +391,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                             candidatos_num = []
                                         break
 
-                            # Evaluación de disponibilidad real en memoria
                             cartones_asignados = []
                             cartones_no_disponibles = []
 
@@ -402,7 +400,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 else:
                                     cartones_no_disponibles.append(num_req)
 
-                            # RESTRICCIÓN NUEVA: Si pide números específicos y condición al azar, y hay ocupados -> Alerta interactiva
+                            # 1. Caso con conflicto y condición al azar (Alerta interactiva)
                             if cartones_no_disponibles and pide_azar:
                                 clientes_procesados_cola.append({
                                     "tipo": "pendiente_azar_condicional",
@@ -412,6 +410,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     "libres": cartones_asignados,
                                     "ref": ref_wpp
                                 })
+                            # 2. Caso puramente al azar
                             elif pide_azar and len(candidatos_num) == 0 and cantidad_azar_solicitada > 0:
                                 clientes_procesados_cola.append({
                                     "tipo": "pendiente_azar",
@@ -419,25 +418,24 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     "cantidad": cantidad_azar_solicitada,
                                     "ref": ref_wpp
                                 })
+                            # 3. Asignación directa limpia o con reporte unificado en ficha única
                             else:
                                 cartones_completados_azar = []
-                                if pide_azar and len(candidatos_num) > 0 and not cartones_no_disponibles:
-                                    pass
-
                                 todos_finales_cliente = cartones_asignados + cartones_no_disponibles
 
-                                if todos_finales_cliente:
-                                    for n in todos_finales_cliente:
+                                if cartones_asignados:
+                                    for n in cartones_asignados:
                                         ocupados_en_memoria.add(n)
 
-                                    c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (nombre_cliente,))
+                                    # Búsqueda exacta para unificar y evitar duplicar registros
+                                    c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (nombre_cliente,))
                                     cliente_db_existente = c.fetchone()
 
                                     if cliente_db_existente:
                                         id_db, nums_db_str, ref_db = cliente_db_existente
                                         nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", nums_db_str)]
                                         
-                                        cartones_combinados = sorted(list(set(nums_db_lista + todos_finales_cliente)))
+                                        cartones_combinados = sorted(list(set(nums_db_lista + cartones_asignados)))
                                         nums_combinados_str = ", ".join(map(str, cartones_combinados))
                                         
                                         ref_final = ref_db if ref_db else ref_wpp
@@ -448,15 +446,15 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     else:
                                         estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, todos_finales_cliente)), len(todos_finales_cliente), estado_reg, ref_wpp))
+                                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, cartones_asignados)), len(cartones_asignados), estado_reg, ref_wpp))
 
-                                if todos_finales_cliente or cartones_no_disponibles:
+                                # Agregar a la cola para mostrar la ficha unificada con el estatus y no disponibles
+                                if cartones_asignados or cartones_no_disponibles:
                                     clientes_procesados_cola.append({
                                         "tipo": "asignado_o_aviso",
                                         "cliente": nombre_cliente,
                                         "asignados": cartones_asignados,
                                         "no_disponibles": cartones_no_disponibles,
-                                        "completados_azar": cartones_completados_azar,
                                         "ref": ref_wpp
                                     })
 
@@ -513,12 +511,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.rerun()
 
     # =========================================================================
-    # TARJETAS INDIVIDUALES POR CLIENTE EN EL ORDEN EXACTO DE IMPORTACIÓN
+    # TARJETAS UNIFICADAS POR CLIENTE EN EL ORDEN EXACTO DE IMPORTACIÓN
     # =========================================================================
     if "tarjetas_clientes_wpp" in st.session_state and st.session_state["tarjetas_clientes_wpp"]:
         st.markdown("---")
         st.markdown("#### 👤 Resumen Individual por Cliente de la Importación")
-        st.caption("Cada tarjeta a continuación agrupa exactamente la situación de cada jugador en su respectivo orden.")
+        st.caption("Cada tarjeta a continuación agrupa en un solo lugar el resultado de cada jugador.")
 
         tarjetas_restantes = []
         for i, tarjeta in enumerate(st.session_state["tarjetas_clientes_wpp"]):
@@ -558,7 +556,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             cartones_asignados = sorted(random.sample(disponibles_reales, cant_ajustada))
                             ref_wpp = tarjeta['ref']
 
-                            c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (tarjeta['cliente'],))
+                            c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (tarjeta['cliente'],))
                             cliente_db_existente = c.fetchone()
 
                             if cliente_db_existente:
@@ -620,7 +618,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             cartones_finales_aprobados = sorted(cartones_finales_aprobados + reemplazos_azar)
                             
                             ref_wpp = tarjeta['ref']
-                            c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (tarjeta['cliente'],))
+                            c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (tarjeta['cliente'],))
                             cliente_db_existente = c.fetchone()
 
                             if cliente_db_existente:
@@ -653,13 +651,16 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.markdown(f"👤 **Cliente:** {tarjeta['cliente']}")
                     
                     if tarjeta["asignados"]:
-                        st.success(f"✅ Cartones específicos asignados correctamente: " + ", ".join(map(str, tarjeta["asignados"])))
+                        st.success(f"✅ Cartones asignados y guardados: " + ", ".join(map(str, tarjeta["asignados"])))
                     
                     if tarjeta["no_disponibles"]:
-                        st.warning(f"⚠️ Los siguientes cartones que pidió no estaban disponibles: " + ", ".join(map(str, tarjeta["no_disponibles"])))
-
-                    if tarjeta.get("completados_azar"):
-                        st.info(f"🎲 Se completaron al azar con: " + ", ".join(map(str, tarjeta["completados_azar"])))
+                        str_no_disp = ", ".join(map(str, tarjeta["no_disponibles"]))
+                        st.warning(f"⚠️ **Números no disponibles:** `{str_no_disp}`")
+                        
+                        # Botón para copiar directamente los números no disponibles
+                        if st.button(f"📋 Copiar números no disponibles ({str_no_disp})", key=f"btn_copiar_nodisp_{i}"):
+                            st.toast(f"¡Copiado al portapapeles: {str_no_disp}!", icon="📋")
+                            st.write(f'<script>navigator.clipboard.writeText("{str_no_disp}");</script>', unsafe_allow_html=True)
 
                     if not st.button("🗑️ Cerrar esta tarjeta", key=f"cerrar_tarjeta_{i}"):
                         tarjetas_restantes.append(tarjeta)
