@@ -301,22 +301,28 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # Dividir el texto en líneas limpias
+                        # Limpieza de espacios múltiples que deja el copiado de WhatsApp Web
+                        texto_limpio_total = re.sub(r'\s+', ' ', texto_wpp_unificado).strip()
+                        
+                        # Intentar separar por líneas reales primero (si el usuario hizo saltos)
                         lineas_crudas = texto_wpp_unificado.split('\n')
-                        lineas = [l.strip() for l in lineas_crudas if l.strip()]
+                        lineas = [l.strip() for l in lineas_crudas if l.strip() and not re.fullmatch(r'[\d:\s]+(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l.strip(), re.IGNORECASE)]
 
-                        # --- EXTRACCIÓN INFALIBLE: LÍNEA 1 = NOMBRE, RESTO = MENSAJE ---
                         nombre_cliente = "Cliente WhatsApp"
                         cuerpo_busqueda = texto_wpp_unificado
 
-                        if len(lineas) >= 1:
-                            # Forzar que la primera línea sea estrictamente el nombre del contacto (Ej: Alejandra)
+                        # Si hay saltos de línea reales detectados
+                        if len(lineas) >= 2:
                             nombre_cliente = lineas[0]
-                            # El resto de líneas se combinan para buscar el pedido (Ej: Buenas tardes 65 números al azar)
-                            if len(lineas) > 1:
-                                cuerpo_busqueda = " ".join(lineas[1:])
-                            else:
-                                cuerpo_busqueda = lineas[0]
+                            cuerpo_busqueda = " ".join(lineas[1:])
+                        else:
+                            # Si se copió todo seguido en una sola línea (como muestra la imagen)
+                            match_nombre = re.match(r"^([A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?)", texto_limpio_total)
+                            if match_nombre:
+                                posible_nombre = match_nombre.group(1)
+                                if posible_nombre.lower() not in ["buenas", "hola", "buenos", "tardes", "dias"]:
+                                    nombre_cliente = posible_nombre
+                                    cuerpo_busqueda = texto_limpio_total[len(posible_nombre):].strip()
 
                         # Detección de cartones o peticiones al azar en el cuerpo del mensaje
                         nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_busqueda) if 1 <= int(n) <= 630]
@@ -327,7 +333,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         if pide_azar or len(nums_wpp) == 1 and int(nums_wpp[0]) <= 200:
                             for palabra in re.findall(r'\b\d+\b', cuerpo_busqueda):
                                 val_num = int(palabra)
-                                if val_num <= 630: # Captura correcta de números grandes como 65
+                                if val_num <= 630: # Captura correcta de los 65 números
                                     cantidad_solicitada = val_num
                                     break
 
