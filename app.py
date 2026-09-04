@@ -263,36 +263,35 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                 elif not nums_val:
                     st.error("Debe indicar al menos un cartón válido (1-630).")
                 else:
-                    estado_reg = "Cancelado" if ref_input.strip() else "Pendiente por Cancelar"
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    
-                    # Búsqueda insensible a mayúsculas/minúsculas o espacios para unificar sin duplicar
                     c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (cli_input.strip(),))
                     cliente_existente = c.fetchone()
-                    
-                    if cliente_existente:
-                        id_existente, nums_existentes_str, ref_existente = cliente_existente
-                        nums_existentes = [int(n) for n in re.findall(r"\b\d+\b", nums_existentes_str)]
-                        
-                        nuevos_unicos = sorted(list(set(nums_existentes + [int(n) for n in nums_val])))
-                        total_nums_combinados = len(nuevos_unicos)
-                        nums_combinados_str = ", ".join(map(str, nuevos_unicos))
-                        
-                        ref_final = ref_existente if ref_existente else ref_input.strip()
-                        estado_reg_final = "Cancelado" if ref_final else "Pendiente por Cancelar"
-                        
-                        c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                  (nums_combinados_str, total_nums_combinados, estado_reg_final, ref_final, id_existente))
-                        st.success(f"¡Cliente existente '{cli_input.strip()}' unificado y actualizado sin duplicar!")
-                    else:
-                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(map(str, sorted(list(set([int(n) for n in nums_val]))))), len(set(nums_val)), estado_reg, ref_input.strip()))
-                        st.success("¡Cliente registrado con éxito!")
-                        
-                    conn.commit()
                     conn.close()
-                    st.rerun()
+
+                    if cliente_existente:
+                        # Si ya existe, guardamos en la cola de tarjetas para que pregunte antes de unificar
+                        if "tarjetas_clientes_wpp" not in st.session_state:
+                            st.session_state["tarjetas_clientes_wpp"] = []
+                        
+                        st.session_state["tarjetas_clientes_wpp"].append({
+                            "tipo": "pendiente_nombre_duplicado",
+                            "cliente": cli_input.strip(),
+                            "nuevos_asignados": [int(n) for n in nums_val if int(n) not in cartones_ocupados],
+                            "nuevos_no_disponibles": [int(n) for n in nums_val if int(n) in cartones_ocupados],
+                            "ref": ref_input.strip()
+                        })
+                        st.warning(f"⚠️ El cliente '{cli_input.strip()}' ya existe en la base de datos. Se generó una tarjeta de alerta abajo para confirmar si desea sumar los registros.")
+                    else:
+                        estado_reg = "Cancelado" if ref_input.strip() else "Pendiente por Cancelar"
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(map(str, sorted(list(set([int(n) for n in nums_val])))))), len(set(nums_val)), estado_reg, ref_input.strip()))
+                        conn.commit()
+                        conn.close()
+                        st.success("¡Cliente registrado con éxito!")
+                        st.rerun()
 
         st.divider()
 
@@ -400,8 +399,20 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 else:
                                     cartones_no_disponibles.append(num_req)
 
-                            # 1. Caso con conflicto y condición al azar (Alerta interactiva)
-                            if cartones_no_disponibles and pide_azar:
+                            # Verificación estricta en DB si el nombre ya existe
+                            c.execute("SELECT id FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (nombre_cliente,))
+                            cliente_db_existente = c.fetchone()
+
+                            if cliente_db_existente:
+                                # Generar tarjeta de alerta interactiva por nombre duplicado
+                                clientes_procesados_cola.append({
+                                    "tipo": "pendiente_nombre_duplicado",
+                                    "cliente": nombre_cliente,
+                                    "nuevos_asignados": cartones_asignados,
+                                    "nuevos_no_disponibles": cartones_no_disponibles,
+                                    "ref": ref_wpp
+                                })
+                            elif cartones_no_disponibles and pide_azar:
                                 clientes_procesados_cola.append({
                                     "tipo": "pendiente_azar_condicional",
                                     "cliente": nombre_cliente,
@@ -410,7 +421,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     "libres": cartones_asignados,
                                     "ref": ref_wpp
                                 })
-                            # 2. Caso puramente al azar
                             elif pide_azar and len(candidatos_num) == 0 and cantidad_azar_solicitada > 0:
                                 clientes_procesados_cola.append({
                                     "tipo": "pendiente_azar",
@@ -418,37 +428,15 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     "cantidad": cantidad_azar_solicitada,
                                     "ref": ref_wpp
                                 })
-                            # 3. Asignación directa limpia o con reporte unificado en ficha única
                             else:
-                                cartones_completados_azar = []
-                                todos_finales_cliente = cartones_asignados + cartones_no_disponibles
-
                                 if cartones_asignados:
                                     for n in cartones_asignados:
                                         ocupados_en_memoria.add(n)
 
-                                    # Búsqueda exacta para unificar y evitar duplicar registros
-                                    c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (nombre_cliente,))
-                                    cliente_db_existente = c.fetchone()
+                                    estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
+                                    c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                              (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, cartones_asignados)), len(cartones_asignados), estado_reg, ref_wpp))
 
-                                    if cliente_db_existente:
-                                        id_db, nums_db_str, ref_db = cliente_db_existente
-                                        nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", nums_db_str)]
-                                        
-                                        cartones_combinados = sorted(list(set(nums_db_lista + cartones_asignados)))
-                                        nums_combinados_str = ", ".join(map(str, cartones_combinados))
-                                        
-                                        ref_final = ref_db if ref_db else ref_wpp
-                                        estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
-                                        
-                                        c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                                  (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_db))
-                                    else:
-                                        estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
-                                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, cartones_asignados)), len(cartones_asignados), estado_reg, ref_wpp))
-
-                                # Agregar a la cola para mostrar la ficha unificada con el estatus y no disponibles
                                 if cartones_asignados or cartones_no_disponibles:
                                     clientes_procesados_cola.append({
                                         "tipo": "asignado_o_aviso",
@@ -511,7 +499,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.rerun()
 
     # =========================================================================
-    # TARJETAS UNIFICADAS POR CLIENTE EN EL ORDEN EXACTO DE IMPORTACIÓN
+    # TARJETAS UNIFICADAS Y DE ALERTA POR NOMBRE DUPLICADO
     # =========================================================================
     if "tarjetas_clientes_wpp" in st.session_state and st.session_state["tarjetas_clientes_wpp"]:
         st.markdown("---")
@@ -521,7 +509,45 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         tarjetas_restantes = []
         for i, tarjeta in enumerate(st.session_state["tarjetas_clientes_wpp"]):
             with st.container(border=True):
-                if tarjeta["tipo"] == "pendiente_azar":
+                if tarjeta["tipo"] == "pendiente_nombre_duplicado":
+                    st.markdown(f"⚠️ **Alerta - Nombre Duplicado:** 👤 El cliente **'{tarjeta['cliente']}'** ya se encuentra registrado en el sistema.")
+                    st.info(f"Nuevos cartones solicitados/libres: `{tarjeta['nuevos_asignados']}` | No disponibles: `{tarjeta['nuevos_no_disponibles']}`")
+                    st.markdown("¿Desea **sumar** estos nuevos números al registro existente de este cliente?")
+
+                    col_d1, col_d2 = st.columns(2)
+                    with col_d1:
+                        btn_sumar_dupl = st.button("✅ Sí, sumar al registro existente", key=f"btn_sumar_dupl_{i}", use_container_width=True)
+                    with col_d2:
+                        btn_rechazar_dupl = st.button("❌ Rechazar / No hacer nada", key=f"btn_rech_dupl_{i}", use_container_width=True)
+
+                    if btn_sumar_dupl:
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (tarjeta['cliente'],))
+                        cliente_db = c.fetchone()
+
+                        if cliente_db:
+                            id_db, nums_db_str, ref_db = cliente_db
+                            nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", nums_db_str)]
+                            cartones_combinados = sorted(list(set(nums_db_lista + tarjeta['nuevos_asignados'])))
+                            nums_combinados_str = ", ".join(map(str, cartones_combinados))
+                            
+                            ref_final = ref_db if ref_db else tarjeta['ref']
+                            estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
+                            
+                            c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
+                                      (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_db))
+                            conn.commit()
+                        conn.close()
+                        st.success(f"¡Registros sumados y unificados con éxito para {tarjeta['cliente']}!")
+                        st.rerun()
+
+                    elif btn_rechazar_dupl:
+                        st.info(f"Operación descartada para {tarjeta['cliente']}.")
+                    else:
+                        tarjetas_restantes.append(tarjeta)
+
+                elif tarjeta["tipo"] == "pendiente_azar":
                     st.markdown(f"🎲 **Solicitud al Azar:** 👤 **{tarjeta['cliente']}** pidió **{tarjeta['cantidad']}** cartones al azar.")
                     
                     col_conf1, col_conf2, col_conf3 = st.columns([2, 1, 1])
@@ -657,7 +683,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         str_no_disp = ", ".join(map(str, tarjeta["no_disponibles"]))
                         st.warning(f"⚠️ **Números no disponibles:** `{str_no_disp}`")
                         
-                        # Botón para copiar directamente los números no disponibles
                         if st.button(f"📋 Copiar números no disponibles ({str_no_disp})", key=f"btn_copiar_nodisp_{i}"):
                             st.toast(f"¡Copiado al portapapeles: {str_no_disp}!", icon="📋")
                             st.write(f'<script>navigator.clipboard.writeText("{str_no_disp}");</script>', unsafe_allow_html=True)
