@@ -282,11 +282,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         with col_inf1:
             st.markdown("##### 📥 Importar Directo desde WhatsApp")
             
-            # Inicializar contador de reseteo para el campo de texto de WhatsApp
             if "wpp_reset_counter" not in st.session_state:
                 st.session_state["wpp_reset_counter"] = 0
 
-            # Llave dinámica para evitar el error de instanciación al limpiar
             wpp_key = f"input_texto_wpp_{st.session_state['wpp_reset_counter']}"
 
             with st.form("form_whatsapp"):
@@ -315,30 +313,43 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         for l in lineas_crudas:
                             l_limpia = l.strip()
                             if l_limpia:
+                                # Ignorar líneas que sean solo horas o marcas de tiempo puras
                                 if not re.fullmatch(r'[\d:\s]+(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l_limpia, re.IGNORECASE):
                                     lineas.append(l_limpia)
 
-                        # Detección ultra precisa del nombre del contacto de WhatsApp
+                        # --- DETRACCIÓN ULTRA PRECISA DEL NOMBRE DEL CONTACTO ---
                         nombre_cliente = "Cliente WhatsApp"
                         cuerpo_busqueda = texto_wpp_unificado
 
                         if len(lineas) >= 1:
-                            posible_nombre = lineas[0]
-                            posible_nombre = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', posible_nombre).strip()
-                            posible_nombre = re.sub(r'^\+?[\d\s\-\(\)]+', '', posible_nombre).strip()
+                            candidato_linea1 = lineas[0]
                             
-                            if posible_nombre and not posible_nombre.isdigit() and len(posible_nombre) > 1:
-                                nombre_cliente = posible_nombre
+                            # Limpiar corchetes de hora estilo [10:15 a. m.] o [12/08/2026, 15:30]
+                            candidato_limpio = re.sub(r'\[.*?\]', '', candidato_linea1).strip()
+                            # Limpiar horas sueltas al inicio o final de la línea
+                            candidato_limpio = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', candidato_limpio, flags=re.IGNORECASE).strip()
+                            # Limpiar prefijos telefónicos largos o códigos internacionales si aparecen solos
+                            candidato_limpio = re.sub(r'^\+?[\d\s\-\(\)]{7,}', '', candidato_limpio).strip()
+                            
+                            # Si la primera línea tras limpiar tiene texto válido y no es pura fecha/número telefónico
+                            if candidato_limpio and not candidato_limpio.isdigit() and len(candidato_limpio) > 1:
+                                nombre_cliente = candidato_limpio
+                                if len(lineas) > 1:
+                                    cuerpo_busqueda = " ".join(lineas[1:])
                             elif len(lineas) > 1:
-                                posible_nombre_2 = re.sub(r'\[\d{1,2}:\d{2}.*?\]', '', lineas[1]).strip()
-                                posible_nombre_2 = re.sub(r'^\+?[\d\s\-\(\)]+', '', posible_nombre_2).strip()
-                                if posible_nombre_2 and not posible_nombre_2.isdigit() and len(posible_nombre_2) > 1:
-                                    nombre_cliente = posible_nombre_2
+                                # Intentar con la segunda línea si la primera era solo un número o timestamp
+                                candidato_linea2 = lineas[1]
+                                candidato_limpio2 = re.sub(r'\[.*?\]', '', candidato_linea2).strip()
+                                candidato_limpio2 = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', candidato_limpio2, flags=re.IGNORECASE).strip()
+                                
+                                if candidato_limpio2 and not candidato_limpio2.isdigit() and len(candidato_limpio2) > 1:
+                                    nombre_cliente = candidato_limpio2
+                                    if len(lineas) > 2:
+                                        cuerpo_busqueda = " ".join(lineas[2:])
+                                else:
+                                    cuerpo_busqueda = " ".join(lineas[1:])
 
-                            if len(lineas) > 1:
-                                cuerpo_busqueda = " ".join(lineas[1:])
-
-                        # Detectar cartones o peticiones al azar
+                        # Detección de cartones o peticiones al azar
                         nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_busqueda) if 1 <= int(n) <= 630]
                         texto_lower = cuerpo_busqueda.lower()
                         pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname"]) or len(nums_wpp) <= 2 and any(c in texto_lower for c in ["carton", "cartones", "anotame", "inscribeme"])
@@ -385,7 +396,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             conn.commit()
                             conn.close()
                             
-                            # Limpiar campo de texto con incremento de contador
                             st.session_state["wpp_reset_counter"] += 1
                             st.success(f"¡Registrado! Contacto: {nombre_cliente} | Cartones: {len(nums_wpp)}")
                             st.rerun()
