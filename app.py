@@ -419,7 +419,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                             texto_lower = cuerpo_mensaje.lower()
                             
-                            # Filtro estricto mejorado para peticiones al azar / automáticas
                             palabras_clave_azar = [
                                 "azar", "aleatorio", "ocupados", "si no", "o al azar", 
                                 "dame", "colocame", "asigname", "mandame", "regalame", "ponme"
@@ -434,7 +433,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                             cantidad_azar_solicitada = 0
                             
-                            # Diccionario de palabras a números para detección estricta (ej: "dos" -> 2, "cuatro" -> 4)
                             mapa_numeros_palabras = {
                                 "un": 1, "uno": 1, "una": 1,
                                 "dos": 2, "tres": 3, "cuatro": 4, 
@@ -447,7 +445,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     cantidad_azar_solicitada = val_num
                                     break
 
-                            # Si hay un número en dígito cerca de palabras de solicitud (ej: "dame 3")
                             if cantidad_azar_solicitada == 0:
                                 for palabra in ["dame", "colocame", "asigname", "mandame", "regalame", "ponme", "azar", "aleatorio"]:
                                     if palabra in texto_lower:
@@ -456,13 +453,13 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         nums_despues = [int(n) for n in re.findall(r"\b\d+\b", texto_despues)]
                                         if nums_despues:
                                             posible_cant = nums_despues[0]
-                                            if posible_cant <= 50: # Evitar confundir con referencias grandes
+                                            if posible_cant <= 50:
                                                 cantidad_azar_solicitada = posible_cant
                                                 if cantidad_azar_solicitada in candidatos_num:
                                                     candidatos_num.remove(cantidad_azar_solicitada)
                                         break
 
-                            # Si el filtro detecta que pide una cantidad al azar explícita y no traía cartones específicos válidos
+                            # Si detecta que pide cantidad al azar y no trae cartones fijos válidos, se manda directo a pendiente de confirmación
                             if pide_azar and len(candidatos_num) == 0 and cantidad_azar_solicitada > 0:
                                 pendientes_cola.append({
                                     "tipo": "pendiente_azar",
@@ -533,7 +530,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             st.session_state["pendientes_pendientes_wpp"] = []
                         st.session_state["pendientes_pendientes_wpp"].extend(pendientes_cola)
                         
-                        st.success("¡Chats procesados con filtro estricto!")
+                        st.success("¡Chats procesados! Revisa las alertas de confirmación pendientes.")
                         st.rerun()
 
         with col_inf2:
@@ -665,30 +662,46 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         cols_az1, cols_az2 = st.columns([2, 1])
                         cant_pedida = notif_asociada["cantidad"]
                         with cols_az1:
-                            st.caption(f"🎲 Pide {cant_pedida} al azar")
+                            st.caption(f"🎲 Pide {cant_pedida} al azar (Confirma abajo)")
                         with cols_az2:
-                            if st.button("➕ Asignar", key=f"azar_btn_{id_r}_{random.randint(100,999)}", use_container_width=True):
-                                conn_tmp = sqlite3.connect(DB_NAME)
-                                c_tmp = conn_tmp.cursor()
-                                c_tmp.execute("SELECT numeros FROM ventas")
-                                filas_actuales = c_tmp.fetchall()
-                                conn_tmp.close()
-                                
-                                ocupados_actuales = set()
-                                for f_nums, in filas_actuales:
-                                    for n in re.findall(r"\b\d+\b", f_nums):
-                                        ocupados_actuales.add(int(n))
-                                
-                                libres_reales = [n for n in range(1, 631) if n not in ocupados_actuales]
-                                
-                                if len(libres_reales) < cant_pedida:
-                                    st.error("No hay suficientes cartones libres.")
-                                else:
-                                    seleccionados = sorted(random.sample(libres_reales, cant_pedida))
+                            if st.button("❌ Descartar", key=f"desc_azar_{id_r}_{random.randint(100,999)}", use_container_width=True):
+                                st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
+                                st.rerun()
+
+                        # Generar propuesta aleatoria temporal para que el usuario la confirme
+                        conn_tmp = sqlite3.connect(DB_NAME)
+                        c_tmp = conn_tmp.cursor()
+                        c_tmp.execute("SELECT numeros FROM ventas")
+                        filas_actuales = c_tmp.fetchall()
+                        conn_tmp.close()
+                        
+                        ocupados_actuales = set()
+                        for f_nums, in filas_actuales:
+                            for n in re.findall(r"\b\d+\b", f_nums):
+                                ocupados_actuales.add(int(n))
+                        
+                        libres_reales = [n for n in range(1, 631) if n not in ocupados_actuales]
+                        
+                        if len(libres_reales) < cant_pedida:
+                            st.error(f"No hay suficientes cartones libres (quedan {len(libres_reales)}).")
+                        else:
+                            if "azar_propuestas" not in st.session_state:
+                                st.session_state["azar_propuestas"] = {}
+                            
+                            prop_key = f"{cliente}_{cant_pedida}"
+                            if prop_key not in st.session_state["azar_propuestas"]:
+                                st.session_state["azar_propuestas"][prop_key] = sorted(random.sample(libres_reales, cant_pedida))
+                            
+                            numeros_propuestos = st.session_state["azar_propuestas"][prop_key]
+                            st.info(f"💡 **Propuesta al azar:** `{', '.join(map(str, numeros_propuestos))}`")
+                            
+                            col_conf1, col_conf2 = st.columns(2)
+                            with col_conf1:
+                                if st.button("✔️ Confirmar y Asignar", key=f"conf_azar_{id_r}_{random.randint(100,999)}", use_container_width=True):
                                     conn = sqlite3.connect(DB_NAME)
                                     c = conn.cursor()
                                     nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
-                                    cartones_combinados = sorted(list(set(nums_db_lista + seleccionados)))
+                                    cartones_combinados = sorted(list(set(nums_db_lista + numeros_propuestos)))
                                     nums_combinados_str = ", ".join(map(str, cartones_combinados))
                                     ref_final = referencia if referencia else notif_asociada['ref']
                                     estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
@@ -698,7 +711,15 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     conn.commit()
                                     conn.close()
                                     
+                                    if prop_key in st.session_state["azar_propuestas"]:
+                                        del st.session_state["azar_propuestas"][prop_key]
                                     st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
+                                    st.success("¡Cartones al azar confirmados y asignados con éxito!")
+                                    st.rerun()
+                            with col_conf2:
+                                if st.button("🔄 Cambiar números", key=f"cambiar_azar_{id_r}_{random.randint(100,999)}", use_container_width=True):
+                                    if prop_key in st.session_state["azar_propuestas"]:
+                                        del st.session_state["azar_propuestas"][prop_key]
                                     st.rerun()
             
             with c_ref_input:
