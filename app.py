@@ -282,15 +282,16 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         with col_inf1:
             st.markdown("##### 📥 Importar Selección Múltiple de WhatsApp (Secuencial en Cascada)")
 
-            # Inicializar estado para el texto de WhatsApp si no existe
-            if "texto_wpp_unificado" not in st.session_state:
-                st.session_state["texto_wpp_unificado"] = ""
+            # Inicializar versión de WhatsApp para limpiar el cuadro de texto dinámicamente
+            if "wpp_version" not in st.session_state:
+                st.session_state["wpp_version"] = 0
+
+            key_text_area = f"input_wpp_area_{st.session_state['wpp_version']}"
 
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
                     "Pega aquí la selección de WhatsApp (uno o varios contactos)", 
-                    value=st.session_state["texto_wpp_unificado"],
-                    key="input_wpp_area",
+                    key=key_text_area,
                     placeholder="Pega aquí el texto copiado de WhatsApp..."
                 )
                 
@@ -301,9 +302,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     btn_borrar_wpp = st.form_submit_button("🗑️ Borrar", use_container_width=True)
                 
                 if btn_borrar_wpp:
-                    st.session_state["texto_wpp_unificado"] = ""
-                    st.session_state["input_wpp_area"] = ""
-                    st.success("¡Texto borrado con éxito!")
+                    # Incrementamos la versión para forzar a Streamlit a recrear el componente completamente vacío sin errores
+                    st.session_state["wpp_version"] += 1
                     st.rerun()
                 
                 if btn_wpp:
@@ -410,7 +410,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         if registros_exitosos > 0:
                             st.success(f"¡Proceso en cascada completado! Se procesaron {len(reporte_procesamiento)} líneas de chat.")
                             
-                            # Guardar en session_state para mostrar las alertas con botones de copia interactivos
+                            # Limpiar también el cuadro de texto incrementando la versión y guardar reporte
+                            st.session_state["wpp_version"] += 1
                             st.session_state["reporte_wpp_activo"] = reporte_procesamiento
                             st.rerun()
                         else:
