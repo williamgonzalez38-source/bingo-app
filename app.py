@@ -374,11 +374,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             if ref_wpp:
                                 candidatos_num = [n for n in candidatos_num if str(n) != ref_wpp]
 
-                            # Lógica para detectar si alguno de los números indicados era en realidad una cantidad "al azar" 
-                            # (Ej: "dame 3 al azar", donde el 3 se interpreta como cantidad si hay una sola cifra pequeña antes de la palabra azar)
                             cantidad_azar_solicitada = 0
                             if pide_azar and len(candidatos_num) > 0:
-                                # Comprobamos si el primer o único número pequeño precede la palabra clave o si pidieron explícitamente "X al azar"
                                 for palabra in palabras_clave_azar:
                                     if palabra in texto_lower:
                                         idx_palabra = texto_lower.find(palabra)
@@ -386,16 +383,14 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         nums_antes = [int(n) for n in re.findall(r"\b\d+\b", texto_antes)]
                                         if nums_antes:
                                             cantidad_azar_solicitada = nums_antes[-1]
-                                            # Removemos ese número de los solicitados específicos para que no lo busque como cartón fijo
                                             if cantidad_azar_solicitada in candidatos_num:
                                                 candidatos_num.remove(cantidad_azar_solicitada)
-                                        elif len(candidatos_num) == 1 and candidatos_num[0] <= 20: # Ej: "5 al azar"
+                                        elif len(candidatos_num) == 1 and candidatos_num[0] <= 20:
                                             cantidad_azar_solicitada = candidatos_num[0]
                                             candidatos_num = []
                                         break
 
                             if pide_azar and cantidad_azar_solicitada > 0 and not candidatos_num:
-                                # Caso puro: solo pidió una cantidad al azar (Ej: "dame 3 al azar")
                                 clientes_procesados_cola.append({
                                     "tipo": "pendiente_azar",
                                     "cliente": nombre_cliente,
@@ -403,7 +398,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     "ref": ref_wpp
                                 })
                             else:
-                                # PRIORIDAD 1: Tomar primero los números específicos que solicitó el cliente
                                 cartones_asignados = []
                                 cartones_no_disponibles = []
 
@@ -413,13 +407,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     else:
                                         cartones_no_disponibles.append(num_req)
 
-                                # PRIORIDAD 2: Si pidió al azar y faltaron números (o si ninguno de los pedidos estaba disponible y puso "al azar"), completar/completar al azar
                                 cartones_completados_azar = []
                                 if pide_azar:
-                                    # Si pidió una cantidad explícita al azar o si faltaron cartones de los que pidió
                                     faltantes_por_completar = cantidad_azar_solicitada if cantidad_azar_solicitada > len(cartones_asignados) else (len(cartones_no_disponibles) if not cartones_asignados and cantidad_azar_solicitada == 0 else 0)
                                     
-                                    # Si el usuario simplemente dijo "el 12, el 15 y si no hay al azar", completamos los no disponibles al azar
                                     if not cantidad_azar_solicitada and cartones_no_disponibles:
                                         faltantes_por_completar = len(cartones_no_disponibles)
 
@@ -428,7 +419,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         if len(disponibles_reales) >= faltantes_por_completar:
                                             cartones_completados_azar = sorted(random.sample(disponibles_reales, faltantes_por_completar))
 
-                                # Agrupamos todos los cartones definitivos para este cliente (los que sí estaban + los completados al azar)
                                 todos_finales_cliente = cartones_asignados + cartones_completados_azar
 
                                 if todos_finales_cliente:
@@ -455,7 +445,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
                                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, todos_finales_cliente)), len(todos_finales_cliente), estado_reg, ref_wpp))
 
-                                # Registrar tarjeta individual con el desglose de lo asignado, lo no disponible y lo completado al azar
                                 if todos_finales_cliente or cartones_no_disponibles:
                                     clientes_procesados_cola.append({
                                         "tipo": "asignado_o_aviso",
@@ -602,10 +591,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if tarjeta["no_disponibles"]:
                         st.warning(f"⚠️ Los siguientes cartones que pidió no estaban disponibles: " + ", ".join(map(str, tarjeta["no_disponibles"])))
 
-                    if tarjeta["completados_azar"]:
+                    # Corrección del KeyError usando .get() para evitar caídas si la clave no fue inicializada
+                    if tarjeta.get("completados_azar"):
                         st.info(f"🎲 Como pidió la opción por si acaso o faltaron números, se le completaron al azar con: " + ", ".join(map(str, tarjeta["completados_azar"])))
 
-                        # Botón dinámico para copiar individualmente la notificación al cliente
                         todos_otorgados = tarjeta["asignados"] + tarjeta["completados_azar"]
                         texto_copiar_cliente = f"Hola {tarjeta['cliente']}, algunos de tus números no estaban disponibles, pero se te asignaron en total: " + ", ".join(map(str, todos_otorgados))
                         
