@@ -36,7 +36,7 @@ def init_db():
 
 init_db()
 
-# Estilos CSS para barra lateral ultra compacta (100px) y botones de alerta pequeños
+# Estilos CSS para barra lateral ultra compacta (100px) y campos compactos de referencia
 st.markdown("""
     <style>
     .main { background-color: #0f172a; color: #f8fafc; padding-top: 0.5rem; }
@@ -534,14 +534,13 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         notif_asociadas = [n_item for n_item in notificaciones_pendientes if n_item.get("cliente", "").strip().lower() == cliente.strip().lower()]
 
         with st.container(border=True):
-            c_info, c_acciones = st.columns([3, 1])
+            # Layout principal dividido: Izquierda info, Derecha referencia rápida de 6 dígitos y botón de expandir edición/borrar
+            c_info, c_ref_input, c_acciones = st.columns([2.2, 1.8, 0.8])
             
             with c_info:
                 st.write(f"**👤 {cliente}** — *{estado}*")
                 st.caption(f"Cartones: {numeros} ({cant_cartones} unid.)")
-                ref_txt = referencia if referencia else "Sin Referencia"
-                st.text(f"Ref: {ref_txt}")
-                st.markdown(f"💰 **Total a Pagar: Bs. {monto_total:,.2f}**")
+                st.markdown(f"💰 **Total: Bs. {monto_total:,.2f}**")
                 
                 # --- BOTONES DE ALERTA PEQUEÑOS Y SIMPLIFICADOS EN LÍNEA ---
                 for notif_asociada in notif_asociadas:
@@ -673,42 +672,57 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                                     st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                     st.rerun()
-            
-            with c_acciones:
-                with st.expander("✏️"):
-                    with st.form(key=f"form_edit_{id_r}"):
-                        st.markdown("##### 🎴 Editar")
-                        nuevos_nums = st.text_input("🔢 Números", value=numeros)
-                        nuevo_cliente = st.text_input("👤 Cliente", value=cliente)
-                        
-                        col_e1, col_e2 = st.columns(2)
-                        with col_e1:
-                            nueva_ref = st.text_input("Ref", value=referencia, max_chars=6)
-                        with col_e2:
-                            nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
-                        
-                        if st.form_submit_button("Guardar", use_container_width=True):
-                            nums_val_edit = [int(n) for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
-                            if not nuevo_cliente.strip():
-                                st.error("Vacío.")
-                            elif not nums_val_edit:
-                                st.error("Inválidos.")
-                            else:
-                                conn = sqlite3.connect(DB_NAME)
-                                c = conn.cursor()
-                                c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=?, cliente=? WHERE id=?",
-                                          (", ".join(map(str, sorted(set(nums_val_edit)))), len(set(nums_val_edit)), nuevo_estado, nueva_ref.strip(), nuevo_cliente.strip(), id_r))
-                                conn.commit()
-                                conn.close()
-                                st.rerun()
 
-                if st.button("🗑️", key=f"del_{id_r}"):
+            with c_ref_input:
+                # Cuadrito compacto superior derecho para colocar/actualizar referencia de pago con 6 dígitos y autoguardado fluido
+                st.markdown("<p style='font-size: 11px; color: #94a3b8; margin-bottom: -2px;'>💳 Referencia Pago (6 dígitos):</p>", unsafe_allow_html=True)
+                key_ref_input = f"ref_rapida_{id_r}"
+                nueva_ref_input = st.text_input("Ref rápida", value=referencia, max_chars=6, label_visibility="collapsed", key=key_ref_input)
+                
+                # Si cambia la referencia inline, se actualiza automáticamente el estado y la BD sin estorbar
+                if nueva_ref_input != referencia:
+                    nuevo_estado_reg = "Cancelado" if nueva_ref_input.strip() else "Pendiente por Cancelar"
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    c.execute("DELETE FROM ventas WHERE id=?", (id_r,))
+                    c.execute("UPDATE ventas SET referencia=?, estado=? WHERE id=?", (nueva_ref_input.strip(), nuevo_estado_reg, id_r))
                     conn.commit()
                     conn.close()
                     st.rerun()
+            
+            with c_acciones:
+                # Botones compactos verticales de edición avanzada y eliminación
+                col_acc1, col_acc2 = st.columns(2)
+                with col_acc1:
+                    with st.popover("✏️"):
+                        st.markdown("##### 🎴 Edición Avanzada")
+                        with st.form(key=f"form_edit_{id_r}"):
+                            nuevos_nums = st.text_input("🔢 Números", value=numeros)
+                            nuevo_cliente = st.text_input("👤 Cliente", value=cliente)
+                            nueva_ref_avanzada = st.text_input("Ref", value=referencia, max_chars=6)
+                            nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
+                            
+                            if st.form_submit_button("Actualizar", use_container_width=True):
+                                nums_val_edit = [int(n) for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
+                                if not nuevo_cliente.strip():
+                                    st.error("Vacío.")
+                                elif not nums_val_edit:
+                                    st.error("Inválidos.")
+                                else:
+                                    conn = sqlite3.connect(DB_NAME)
+                                    c = conn.cursor()
+                                    c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=?, cliente=? WHERE id=?",
+                                              (", ".join(map(str, sorted(set(nums_val_edit)))), len(set(nums_val_edit)), nuevo_estado, nueva_ref_avanzada.strip(), nuevo_cliente.strip(), id_r))
+                                    conn.commit()
+                                    conn.close()
+                                    st.rerun()
+                with col_acc2:
+                    if st.button("🗑️", key=f"del_{id_r}", help="Eliminar registro"):
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("DELETE FROM ventas WHERE id=?", (id_r,))
+                        conn.commit()
+                        conn.close()
+                        st.rerun()
 
     # Tarjetas de notificaciones huérfanas simplificadas para nuevos clientes
     clientes_en_db = [r[2].strip().lower() for r in filas_db]
