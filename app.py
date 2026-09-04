@@ -301,22 +301,24 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # Limpiar y separar líneas ignorando metadatos o espacios vacíos
-                        lineas_crudas = texto_wpp_unificado.split('\n')
-                        lineas = [l.strip() for l in lineas_crudas if l.strip() and not re.fullmatch(r'[\d:\s]+(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l.strip(), re.IGNORECASE)]
+                        # 1. Eliminar por completo cualquier formato de hora (ej: 12:34 p. m., 4:15 am, 14:30) del texto crudo
+                        texto_sin_horas = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', texto_wpp_unificado, flags=re.IGNORECASE)
+                        texto_sin_horas = re.sub(r'\b(?:ayer|hoy)\b', '', texto_sin_horas, flags=re.IGNORECASE)
+
+                        # 2. Separar en líneas limpias
+                        lineas_crudas = texto_sin_horas.split('\n')
+                        lineas = [l.strip() for l in lineas_crudas if l.strip()]
 
                         nombre_cliente = ""
-                        cuerpo_busqueda = texto_wpp_unificado
+                        cuerpo_busqueda = texto_sin_horas
 
-                        # EXTRACCIÓN ESTRICTA: La primera línea remarcada es obligatoriamente el nombre
+                        # 3. EXTRACCIÓN ESTRICTA DEL NOMBRE (Primera línea o primera palabra real)
                         if len(lineas) >= 1:
                             nombre_cliente = lineas[0]
-                            # Si hay más líneas, el resto es el mensaje/pedido
                             if len(lineas) > 1:
                                 cuerpo_busqueda = " ".join(lineas[1:])
                         else:
-                            # Si se copió todo seguido en una sola línea (en bloque continuo)
-                            texto_limpio_total = re.sub(r'\s+', ' ', texto_wpp_unificado).strip()
+                            texto_limpio_total = re.sub(r'\s+', ' ', texto_sin_horas).strip()
                             match_primera_palabra = re.match(r"^([A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?)", texto_limpio_total)
                             if match_primera_palabra:
                                 posible_nombre = match_primera_palabra.group(1)
@@ -324,24 +326,29 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     nombre_cliente = posible_nombre
                                     cuerpo_busqueda = texto_limpio_total[len(posible_nombre):].strip()
 
-                        # Respaldo estricto por si no se detectó nombre arriba
                         if not nombre_cliente:
-                            nombre_cliente = "Cliente Desconocido"
+                            nombre_cliente = "Cliente WhatsApp"
 
-                        # Detección de cartones o peticiones al azar en el cuerpo del mensaje
-                        nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_busqueda) if 1 <= int(n) <= 630]
+                        # 4. Análisis de la acción y los números solicitados
                         texto_lower = cuerpo_busqueda.lower()
-                        pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname"]) or len(nums_wpp) <= 2 and any(c in texto_lower for c in ["carton", "cartones", "anotame", "inscribeme"])
+                        pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme"])
+                        
+                        # Extraer todos los números enteros del cuerpo del mensaje
+                        todos_numeros_cuerpo = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_busqueda)]
+                        
+                        # Filtrar posibles cartones válidos (1 a 630)
+                        nums_wpp = [str(n) for n in todos_numeros_cuerpo if 1 <= n <= 630]
 
+                        # Detectar si está pidiendo una cantidad específica al azar (ej: "dame 5 cartones" o solo un número bajo que indique cantidad)
                         cantidad_solicitada = 0
-                        if pide_azar or len(nums_wpp) == 1 and int(nums_wpp[0]) <= 200:
-                            for palabra in re.findall(r'\b\d+\b', cuerpo_busqueda):
-                                val_num = int(palabra)
-                                if val_num <= 630: # Captura correcta de los 65 números
-                                    cantidad_solicitada = val_num
+                        if pide_azar or (len(todos_numeros_cuerpo) == 1 and todos_numeros_cuerpo[0] <= 100 and not any(n in cuerpo_busqueda for n in ["carton", "cartones"] and todos_numeros_cuerpo[0] > 20)):
+                            for n_val in todos_numeros_cuerpo:
+                                if n_val <= 630: # Asumimos que el número pequeño o indicado es la cantidad solicitada
+                                    cantidad_solicitada = n_val
                                     break
 
-                        if cantidad_solicitada > 0 and (len(nums_wpp) <= 1 or pide_azar):
+                        # Si pide al azar de forma clara o la cantidad solicitada representa un bloque aleatorio
+                        if (pide_azar and cantidad_solicitada > 0) or (len(nums_wpp) <= 1 and cantidad_solicitada > 1):
                             conn_tmp = sqlite3.connect(DB_NAME)
                             c_tmp = conn_tmp.cursor()
                             c_tmp.execute("SELECT numeros FROM ventas")
@@ -357,13 +364,14 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             
                             if len(disponibles_reales) < cantidad_solicitada:
                                 st.error(f"El cliente pide {cantidad_solicitada} cartones, pero solo quedan {len(disponibles_reales)} libres.")
+                                nums_wpp = []
                             else:
-                                nums_wpp = sorted(random.sample(disponibles_reales, cantidad_solicitada))
+                                nums_wpp = [str(n) for n in sorted(random.sample(disponibles_reales, cantidad_solicitada))]
 
                         if not nums_wpp:
                             st.error("No se detectaron cartones válidos (1-630) ni cantidad solicitada en el texto pegado.")
                         else:
-                            nums_wpp = [n for n in nums_wpp if 1 <= int(n) <= 630]
+                            # Búsqueda de referencia de pago de 6 dígitos en el texto original
                             ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp_unificado)
                             ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
@@ -371,7 +379,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             conn = sqlite3.connect(DB_NAME)
                             c = conn.cursor()
                             c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, nums_wpp)), len(nums_wpp), estado_reg, ref_wpp))
+                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
                             conn.commit()
                             conn.close()
                             
