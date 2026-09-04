@@ -399,7 +399,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     nombre_cliente = match_simple.group(1).strip()
                                     cuerpo_mensaje = match_simple.group(2).strip()
                                 else:
-                                    # Si no tiene formato de nombre y tenemos un cliente anterior en memoria, asumimos que es un mensaje consecutivo suyo (ej: un segundo número enviado abajo)
                                     if ultimo_cliente:
                                         nombre_cliente = ultimo_cliente
                                         cuerpo_mensaje = linea_s
@@ -419,7 +418,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 ref_wpp = ref_wpp_match.group(0)[-6:]
 
                             texto_lower = cuerpo_mensaje.lower()
-                            palabras_clave_azar = ["azar", "aleatorio", "ocupados", "si no", "o al azar"]
+                            
+                            # Filtro estricto mejorado para peticiones al azar / automáticas
+                            palabras_clave_azar = [
+                                "azar", "aleatorio", "ocupados", "si no", "o al azar", 
+                                "dame", "colocame", "asigname", "mandame", "regalame", "ponme"
+                            ]
                             pide_azar = any(palabra in texto_lower for palabra in palabras_clave_azar)
 
                             todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
@@ -429,17 +433,44 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 candidatos_num = [n for n in candidatos_num if str(n) != ref_wpp]
 
                             cantidad_azar_solicitada = 0
-                            if "azar" in texto_lower or "aleatorio" in texto_lower:
-                                for palabra in ["azar", "aleatorio"]:
+                            
+                            # Diccionario de palabras a números para detección estricta (ej: "dos" -> 2, "cuatro" -> 4)
+                            mapa_numeros_palabras = {
+                                "un": 1, "uno": 1, "una": 1,
+                                "dos": 2, "tres": 3, "cuatro": 4, 
+                                "cinco": 5, "seis": 6, "siete": 7, 
+                                "ocho": 8, "nueve": 9, "diez": 10
+                            }
+                            
+                            for palabra_num, val_num in mapa_numeros_palabras.items():
+                                if palabra_num in texto_lower:
+                                    cantidad_azar_solicitada = val_num
+                                    break
+
+                            # Si hay un número en dígito cerca de palabras de solicitud (ej: "dame 3")
+                            if cantidad_azar_solicitada == 0:
+                                for palabra in ["dame", "colocame", "asigname", "mandame", "regalame", "ponme", "azar", "aleatorio"]:
                                     if palabra in texto_lower:
                                         idx_palabra = texto_lower.find(palabra)
-                                        texto_antes = texto_lower[:idx_palabra]
-                                        nums_antes = [int(n) for n in re.findall(r"\b\d+\b", texto_antes)]
-                                        if nums_antes:
-                                            cantidad_azar_solicitada = nums_antes[-1]
-                                            if cantidad_azar_solicitada in candidatos_num:
-                                                candidatos_num.remove(cantidad_azar_solicitada)
+                                        texto_despues = texto_lower[idx_palabra:]
+                                        nums_despues = [int(n) for n in re.findall(r"\b\d+\b", texto_despues)]
+                                        if nums_despues:
+                                            posible_cant = nums_despues[0]
+                                            if posible_cant <= 50: # Evitar confundir con referencias grandes
+                                                cantidad_azar_solicitada = posible_cant
+                                                if cantidad_azar_solicitada in candidatos_num:
+                                                    candidatos_num.remove(cantidad_azar_solicitada)
                                         break
+
+                            # Si el filtro detecta que pide una cantidad al azar explícita y no traía cartones específicos válidos
+                            if pide_azar and len(candidatos_num) == 0 and cantidad_azar_solicitada > 0:
+                                pendientes_cola.append({
+                                    "tipo": "pendiente_azar",
+                                    "cliente": nombre_cliente,
+                                    "cantidad": cantidad_azar_solicitada,
+                                    "ref": ref_wpp
+                                })
+                                continue
 
                             cartones_asignados = []
                             cartones_no_disponibles = []
@@ -468,13 +499,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     "solicitados": candidatos_num,
                                     "ocupados": cartones_no_disponibles,
                                     "libres": cartones_asignados,
-                                    "ref": ref_wpp
-                                })
-                            elif pide_azar and len(candidatos_num) == 0 and cantidad_azar_solicitada > 0:
-                                pendientes_cola.append({
-                                    "tipo": "pendiente_azar",
-                                    "cliente": nombre_cliente,
-                                    "cantidad": cantidad_azar_solicitada,
                                     "ref": ref_wpp
                                 })
                             else:
@@ -509,7 +533,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             st.session_state["pendientes_pendientes_wpp"] = []
                         st.session_state["pendientes_pendientes_wpp"].extend(pendientes_cola)
                         
-                        st.success("¡Chats procesados!")
+                        st.success("¡Chats procesados con filtro estricto!")
                         st.rerun()
 
         with col_inf2:
@@ -635,6 +659,46 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 if st.button("❌ Borrar Notif.", key=f"cerrar_solo_{id_r}_{random.randint(100,999)}", use_container_width=True):
                                     if notif_asociada in st.session_state["pendientes_pendientes_wpp"]:
                                         st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
+                                    st.rerun()
+
+                    elif tipo_n == "pendiente_azar":
+                        cols_az1, cols_az2 = st.columns([2, 1])
+                        cant_pedida = notif_asociada["cantidad"]
+                        with cols_az1:
+                            st.caption(f"🎲 Pide {cant_pedida} al azar")
+                        with cols_az2:
+                            if st.button("➕ Asignar", key=f"azar_btn_{id_r}_{random.randint(100,999)}", use_container_width=True):
+                                conn_tmp = sqlite3.connect(DB_NAME)
+                                c_tmp = conn_tmp.cursor()
+                                c_tmp.execute("SELECT numeros FROM ventas")
+                                filas_actuales = c_tmp.fetchall()
+                                conn_tmp.close()
+                                
+                                ocupados_actuales = set()
+                                for f_nums, in filas_actuales:
+                                    for n in re.findall(r"\b\d+\b", f_nums):
+                                        ocupados_actuales.add(int(n))
+                                
+                                libres_reales = [n for n in range(1, 631) if n not in ocupados_actuales]
+                                
+                                if len(libres_reales) < cant_pedida:
+                                    st.error("No hay suficientes cartones libres.")
+                                else:
+                                    seleccionados = sorted(random.sample(libres_reales, cant_pedida))
+                                    conn = sqlite3.connect(DB_NAME)
+                                    c = conn.cursor()
+                                    nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
+                                    cartones_combinados = sorted(list(set(nums_db_lista + seleccionados)))
+                                    nums_combinados_str = ", ".join(map(str, cartones_combinados))
+                                    ref_final = referencia if referencia else notif_asociada['ref']
+                                    estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
+                                    
+                                    c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
+                                              (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_r))
+                                    conn.commit()
+                                    conn.close()
+                                    
+                                    st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                     st.rerun()
             
             with c_ref_input:
