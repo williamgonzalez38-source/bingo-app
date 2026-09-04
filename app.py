@@ -366,40 +366,44 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                             texto_lower = cuerpo_mensaje.lower()
                             palabras_clave_azar = ["azar", "aleatorio"]
-                            
-                            cuerpo_a_analizar = cuerpo_mensaje
-                            pide_azar = False
-                            
-                            for palabra in palabras_clave_azar:
-                                if palabra in texto_lower:
-                                    pide_azar = True
-                                    idx_palabra = texto_lower.find(palabra)
-                                    cuerpo_a_analizar = cuerpo_mensaje[:idx_palabra]
-                                    break
+                            pide_azar = any(palabra in texto_lower for palabra in palabras_clave_azar)
 
-                            todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_a_analizar)]
+                            todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
                             candidatos_num = [n for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3]
                             
                             if ref_wpp:
                                 candidatos_num = [n for n in candidatos_num if str(n) != ref_wpp]
 
-                            cantidad_solicitada = 0
+                            # Lógica para detectar si alguno de los números indicados era en realidad una cantidad "al azar" 
+                            # (Ej: "dame 3 al azar", donde el 3 se interpreta como cantidad si hay una sola cifra pequeña antes de la palabra azar)
+                            cantidad_azar_solicitada = 0
                             if pide_azar and len(candidatos_num) > 0:
-                                for n_val in candidatos_num:
-                                    if n_val <= 630:
-                                        cantidad_solicitada = n_val
+                                # Comprobamos si el primer o único número pequeño precede la palabra clave o si pidieron explícitamente "X al azar"
+                                for palabra in palabras_clave_azar:
+                                    if palabra in texto_lower:
+                                        idx_palabra = texto_lower.find(palabra)
+                                        texto_antes = texto_lower[:idx_palabra]
+                                        nums_antes = [int(n) for n in re.findall(r"\b\d+\b", texto_antes)]
+                                        if nums_antes:
+                                            cantidad_azar_solicitada = nums_antes[-1]
+                                            # Removemos ese número de los solicitados específicos para que no lo busque como cartón fijo
+                                            if cantidad_azar_solicitada in candidatos_num:
+                                                candidatos_num.remove(cantidad_azar_solicitada)
+                                        elif len(candidatos_num) == 1 and candidatos_num[0] <= 20: # Ej: "5 al azar"
+                                            cantidad_azar_solicitada = candidatos_num[0]
+                                            candidatos_num = []
                                         break
 
-                            if pide_azar and cantidad_solicitada > 0:
-                                # Tarjeta individual con solicitud al azar pendiente de aprobar
+                            if pide_azar and cantidad_azar_solicitada > 0 and not candidatos_num:
+                                # Caso puro: solo pidió una cantidad al azar (Ej: "dame 3 al azar")
                                 clientes_procesados_cola.append({
                                     "tipo": "pendiente_azar",
                                     "cliente": nombre_cliente,
-                                    "cantidad": cantidad_solicitada,
+                                    "cantidad": cantidad_azar_solicitada,
                                     "ref": ref_wpp
                                 })
                             else:
-                                # Procesamiento directo de cartones específicos solicitados por este usuario
+                                # PRIORIDAD 1: Tomar primero los números específicos que solicitó el cliente
                                 cartones_asignados = []
                                 cartones_no_disponibles = []
 
@@ -409,8 +413,26 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     else:
                                         cartones_no_disponibles.append(num_req)
 
-                                if cartones_asignados:
-                                    for n in cartones_asignados:
+                                # PRIORIDAD 2: Si pidió al azar y faltaron números (o si ninguno de los pedidos estaba disponible y puso "al azar"), completar/completar al azar
+                                cartones_completados_azar = []
+                                if pide_azar:
+                                    # Si pidió una cantidad explícita al azar o si faltaron cartones de los que pidió
+                                    faltantes_por_completar = cantidad_azar_solicitada if cantidad_azar_solicitada > len(cartones_asignados) else (len(cartones_no_disponibles) if not cartones_asignados and cantidad_azar_solicitada == 0 else 0)
+                                    
+                                    # Si el usuario simplemente dijo "el 12, el 15 y si no hay al azar", completamos los no disponibles al azar
+                                    if not cantidad_azar_solicitada and cartones_no_disponibles:
+                                        faltantes_por_completar = len(cartones_no_disponibles)
+
+                                    if faltantes_por_completar > 0:
+                                        disponibles_reales = [n for n in range(1, 631) if n not in ocupados_en_memoria and n not in cartones_asignados]
+                                        if len(disponibles_reales) >= faltantes_por_completar:
+                                            cartones_completados_azar = sorted(random.sample(disponibles_reales, faltantes_por_completar))
+
+                                # Agrupamos todos los cartones definitivos para este cliente (los que sí estaban + los completados al azar)
+                                todos_finales_cliente = cartones_asignados + cartones_completados_azar
+
+                                if todos_finales_cliente:
+                                    for n in todos_finales_cliente:
                                         ocupados_en_memoria.add(n)
 
                                     c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (nombre_cliente,))
@@ -420,7 +442,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         id_db, nums_db_str, ref_db = cliente_db_existente
                                         nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", nums_db_str)]
                                         
-                                        cartones_combinados = sorted(list(set(nums_db_lista + cartones_asignados)))
+                                        cartones_combinados = sorted(list(set(nums_db_lista + todos_finales_cliente)))
                                         nums_combinados_str = ", ".join(map(str, cartones_combinados))
                                         
                                         ref_final = ref_db if ref_db else ref_wpp
@@ -431,15 +453,16 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     else:
                                         estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, cartones_asignados)), len(cartones_asignados), estado_reg, ref_wpp))
+                                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, todos_finales_cliente)), len(todos_finales_cliente), estado_reg, ref_wpp))
 
-                                # Si se asignaron o hubo no disponibles, creamos su tarjeta individual con el estado correspondiente
-                                if cartones_asignados or cartones_no_disponibles:
+                                # Registrar tarjeta individual con el desglose de lo asignado, lo no disponible y lo completado al azar
+                                if todos_finales_cliente or cartones_no_disponibles:
                                     clientes_procesados_cola.append({
                                         "tipo": "asignado_o_aviso",
                                         "cliente": nombre_cliente,
                                         "asignados": cartones_asignados,
                                         "no_disponibles": cartones_no_disponibles,
+                                        "completados_azar": cartones_completados_azar,
                                         "ref": ref_wpp
                                     })
 
@@ -449,7 +472,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         if clientes_procesados_cola:
                             st.session_state["wpp_version"] += 1
                             st.session_state["tarjetas_clientes_wpp"] = clientes_procesados_cola
-                            st.success("¡Importación analizada por cliente exitosamente!")
+                            st.success("¡Importación analizada por cliente con restricciones de números y azar exitosamente!")
                             st.rerun()
                         else:
                             st.error("No se pudieron extraer datos válidos de los chats seleccionados.")
@@ -574,14 +597,17 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.markdown(f"👤 **Cliente:** {tarjeta['cliente']}")
                     
                     if tarjeta["asignados"]:
-                        st.success(f"✅ Cartones asignados correctamente: " + ", ".join(map(str, tarjeta["asignados"])))
+                        st.success(f"✅ Cartones específicos asignados correctamente: " + ", ".join(map(str, tarjeta["asignados"])))
                     
                     if tarjeta["no_disponibles"]:
-                        texto_aviso = f"⚠️ Los siguientes cartones solicitados ya no estaban disponibles: " + ", ".join(map(str, tarjeta["no_disponibles"]))
-                        st.warning(texto_aviso)
-                        
-                        # Botón dinámico para copiar individualmente la alerta de este cliente
-                        texto_copiar_cliente = f"Hola {tarjeta['cliente']}, los cartones " + ", ".join(map(str, tarjeta["no_disponibles"])) + " ya no están disponibles. ¿Deseas elegir otros?"
+                        st.warning(f"⚠️ Los siguientes cartones que pidió no estaban disponibles: " + ", ".join(map(str, tarjeta["no_disponibles"])))
+
+                    if tarjeta["completados_azar"]:
+                        st.info(f"🎲 Como pidió la opción por si acaso o faltaron números, se le completaron al azar con: " + ", ".join(map(str, tarjeta["completados_azar"])))
+
+                        # Botón dinámico para copiar individualmente la notificación al cliente
+                        todos_otorgados = tarjeta["asignados"] + tarjeta["completados_azar"]
+                        texto_copiar_cliente = f"Hola {tarjeta['cliente']}, algunos de tus números no estaban disponibles, pero se te asignaron en total: " + ", ".join(map(str, todos_otorgados))
                         
                         btn_id_c = f"btn_copiar_cli_{i}"
                         div_id_c = f"div_cli_{i}"
