@@ -282,7 +282,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         with col_inf1:
             st.markdown("##### 📥 Importar Directo desde WhatsApp")
             
-            # Inicializar la clave en session_state si no existe
+            # Inicializar la clave ANTES de invocar el formulario o widget de texto
             if "input_texto_wpp" not in st.session_state:
                 st.session_state["input_texto_wpp"] = ""
 
@@ -382,7 +382,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             conn.commit()
                             conn.close()
                             
-                            # Limpiar estado correctamente después de procesar con éxito
+                            # Para limpiar el valor del widget asociado a key, vaciamos el estado y forzamos rerun
                             st.session_state["input_texto_wpp"] = ""
                             st.success(f"¡Registrado! Contacto: {nombre_cliente} | Cartones: {len(nums_wpp)}")
                             st.rerun()
