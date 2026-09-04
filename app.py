@@ -257,7 +257,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             submitted = st.form_submit_button("Guardar Registro")
             
             if submitted:
-                nums_val = [n for n in re.findall(r"\b\d+\b", nums_input) if 1 <= int(n) <= 630]
+                nums_val = [int(n) for n in re.findall(r"\b\d+\b", nums_input) if 1 <= int(n) <= 630]
                 if not cli_input.strip():
                     st.error("Debe indicar el nombre del cliente.")
                 elif not nums_val:
@@ -270,24 +270,24 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     conn.close()
 
                     if cliente_existente:
-                        # Si ya existe, guardamos en la cola de tarjetas para que pregunte antes de unificar
                         if "tarjetas_clientes_wpp" not in st.session_state:
                             st.session_state["tarjetas_clientes_wpp"] = []
                         
                         st.session_state["tarjetas_clientes_wpp"].append({
                             "tipo": "pendiente_nombre_duplicado",
                             "cliente": cli_input.strip(),
-                            "nuevos_asignados": [int(n) for n in nums_val if int(n) not in cartones_ocupados],
-                            "nuevos_no_disponibles": [int(n) for n in nums_val if int(n) in cartones_ocupados],
+                            "nuevos_asignados": [n for n in nums_val if n not in cartones_ocupados],
+                            "nuevos_no_disponibles": [n for n in nums_val if n in cartones_ocupados],
                             "ref": ref_input.strip()
                         })
                         st.warning(f"⚠️ El cliente '{cli_input.strip()}' ya existe en la base de datos. Se generó una tarjeta de alerta abajo para confirmar si desea sumar los registros.")
                     else:
                         estado_reg = "Cancelado" if ref_input.strip() else "Pendiente por Cancelar"
+                        nums_str = ", ".join(map(str, sorted(set(nums_val))))
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(map(str, sorted(list(set([int(n) for n in nums_val])))))), len(set(nums_val)), estado_reg, ref_input.strip()))
+                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), nums_str, len(set(nums_val)), estado_reg, ref_input.strip()))
                         conn.commit()
                         conn.close()
                         st.success("¡Cliente registrado con éxito!")
@@ -399,12 +399,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 else:
                                     cartones_no_disponibles.append(num_req)
 
-                            # Verificación estricta en DB si el nombre ya existe
                             c.execute("SELECT id FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (nombre_cliente,))
                             cliente_db_existente = c.fetchone()
 
                             if cliente_db_existente:
-                                # Generar tarjeta de alerta interactiva por nombre duplicado
                                 clientes_procesados_cola.append({
                                     "tipo": "pendiente_nombre_duplicado",
                                     "cliente": nombre_cliente,
@@ -498,9 +496,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.warning("Base de datos limpia.")
                     st.rerun()
 
-    # =========================================================================
-    # TARJETAS UNIFICADAS Y DE ALERTA POR NOMBRE DUPLICADO
-    # =========================================================================
     if "tarjetas_clientes_wpp" in st.session_state and st.session_state["tarjetas_clientes_wpp"]:
         st.markdown("---")
         st.markdown("#### 👤 Resumen Individual por Cliente de la Importación")
@@ -740,7 +735,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
                         
                         if st.form_submit_button("Guardar Cambios", use_container_width=True):
-                            nums_val_edit = [n for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
+                            nums_val_edit = [int(n) for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
                             if not nuevo_cliente.strip():
                                 st.error("El cliente no puede estar vacío.")
                             elif not nums_val_edit:
@@ -749,7 +744,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 conn = sqlite3.connect(DB_NAME)
                                 c = conn.cursor()
                                 c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=?, cliente=? WHERE id=?",
-                                          (", ".join(nums_val_edit), len(nums_val_edit), nuevo_estado, nueva_ref.strip(), nuevo_cliente.strip(), id_r))
+                                          (", ".join(map(str, sorted(set(nums_val_edit)))), len(set(nums_val_edit)), nuevo_estado, nueva_ref.strip(), nuevo_cliente.strip(), id_r))
                                 conn.commit()
                                 conn.close()
                                 st.rerun()
