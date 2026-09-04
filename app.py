@@ -284,8 +284,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
-                    "Pega aquí la selección múltiple de WhatsApp (varios contactos)", 
-                    placeholder="Pega aquí todo el bloque resaltado con el ratón..."
+                    "Pega aquí la selección de WhatsApp (uno o varios contactos)", 
+                    placeholder="Pega aquí el texto copiado de WhatsApp..."
                 )
                 
                 col_btn_w1, col_btn_w2 = st.columns(2)
@@ -311,17 +311,24 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             if not linea_s:
                                 continue
 
-                            # Detectar formato de chat de WhatsApp: [hora, fecha] Nombre: Mensaje
-                            # Ejemplo: [9:52 a. m., 3/9/2026] Rosellys González: 106=251 Por favor
+                            nombre_cliente = ""
+                            cuerpo_mensaje = ""
+
+                            # 1. Intentar detectar formato completo de chat de WhatsApp con corchetes: [hora, fecha] Nombre: Mensaje
                             match_chat = re.search(r'\[.*?\]\s*([^:]+):\s*(.*)', linea_s)
-                            
                             if match_chat:
                                 nombre_cliente = match_chat.group(1).strip()
                                 cuerpo_mensaje = match_chat.group(2).strip()
                             else:
-                                # Si es una línea sin formato de hora estándar, intentamos tratarla por bloques
-                                nombre_cliente = "Cliente WhatsApp"
-                                cuerpo_mensaje = linea_s
+                                # 2. Intentar detectar formato de un solo contacto copiado sin corchetes pero con nombre y dos puntos (Ej: Marianny Gutierrez: 65 - 71)
+                                match_simple = re.search(r'^([^:]+):\s*(.*)', linea_s)
+                                if match_simple and not linea_s.startswith("http") and len(match_simple.group(1).split()) <= 4:
+                                    nombre_cliente = match_simple.group(1).strip()
+                                    cuerpo_mensaje = match_simple.group(2).strip()
+                                else:
+                                    # Si no tiene estructura de nombre, se toma como mensaje directo
+                                    nombre_cliente = "Cliente WhatsApp"
+                                    cuerpo_mensaje = linea_s
 
                             # Extraer números válidos de cartón (1 a 630)
                             todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
@@ -367,7 +374,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         conn.close()
 
                         if registros_exitosos > 0:
-                            st.success(f"¡Se registraron exitosamente {registros_exitosos} contactos por separado con sus nombres y cartones!")
+                            st.success(f"¡Se registraron exitosamente {registros_exitosos} registros con sus nombres y cartones!")
                             st.rerun()
                         else:
                             st.error("No se pudieron extraer datos válidos o cartones de los chats seleccionados.")
