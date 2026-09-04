@@ -8,6 +8,13 @@ from PIL import Image, ImageDraw, ImageFont
 import streamlit as st
 import streamlit.components.v1 as components
 
+# Importar pytesseract para lectura de imágenes (OCR)
+try:
+    import pytesseract
+    OCR_DISPONIBLE = True
+except ImportError:
+    OCR_DISPONIBLE = False
+
 # Configuración de página web ancha y moderna
 st.set_page_config(
     page_title="Control de Jugadores y Cartones - Bingo",
@@ -286,7 +293,39 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
 elif menu_seleccionado == "📋 Ventas y Registro":
     with st.expander("➕ Opciones de Registro Rápido", expanded=True):
         
+        # --- SECCIÓN NUEVA: Lector OCR de Pago Móvil por Imagen ---
+        st.markdown("##### 📸 Lector Automático de Pago Móvil (Captura)")
+        with st.container(border=True):
+            img_pago_subida = st.file_uploader("Sube la captura del pago móvil (PNG o JPG)", type=["png", "jpg", "jpeg"], key="uploader_pago_movil")
+            
+            if img_pago_subida:
+                if not OCR_DISPONIBLE:
+                    st.error("La librería 'pytesseract' no está instalada en el entorno. Instálala para usar esta función.")
+                else:
+                    try:
+                        imagen_pil = Image.open(img_pago_subida)
+                        # Ejecutar OCR en español/inglés
+                        texto_extraido = pytesseract.image_to_string(imagen_pil)
+                        
+                        # Buscar posibles referencias de 4 a 8 dígitos comunes en pagos móviles (ej: 012345, 12345678)
+                        matches_ref = re.findall(r"\b\d{6}\b", texto_extraido)
+                        if not matches_ref:
+                            matches_ref = re.findall(r"\b\d{4,8}\b", texto_extraido)
+                        
+                        if matches_ref:
+                            ref_detectada = matches_ref[-1][-6:] # Tomar los últimos 6 dígitos
+                            st.success(f"¡Referencia extraída con éxito! Últimos 6 dígitos: **{ref_detectada}**")
+                            st.session_state["ref_ocr_autocompletada"] = ref_detectada
+                        else:
+                            st.warning("No se pudo detectar automáticamente la referencia en la imagen. Intenta recortarla o ingresarla manual.")
+                    except Exception as e:
+                        st.error(f"Error al procesar la imagen: {e}")
+
         st.markdown("##### ➕ Registrar Manual")
+        
+        # Obtener referencia sugerida por OCR si existe
+        ref_sugerida = st.session_state.get("ref_ocr_autocompletada", "")
+        
         with st.form("form_nuevo"):
             col_f1, col_f2, col_f3 = st.columns([2, 2, 1])
             with col_f1:
@@ -294,7 +333,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             with col_f2:
                 nums_input = st.text_input("Cartones (Ej: 12, 45, 100)")
             with col_f3:
-                ref_input = st.text_input("Últimos 6 dígitos", max_chars=6)
+                ref_input = st.text_input("Últimos 6 dígitos", value=ref_sugerida, max_chars=6)
             
             submitted = st.form_submit_button("Guardar Registro")
             
@@ -333,6 +372,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), nums_str, len(set(nums_val)), estado_reg, ref_limpia))
                         conn.commit()
                         conn.close()
+                        # Limpiar cache OCR si se usó
+                        if "ref_ocr_autocompletada" in st.session_state:
+                            del st.session_state["ref_ocr_autocompletada"]
                         st.success("¡Cliente registrado con éxito!")
                         st.rerun()
 
@@ -614,7 +656,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     conn.commit()
                                     conn.close()
                                     
-                                    # Limpiar completamente la sección de nuevos asignados o remover la notificación si ya no hay nada pendiente
                                     notif_asociada['nuevos_asignados'] = []
                                     if not notif_asociada.get('nuevos_no_disponibles'):
                                         st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
