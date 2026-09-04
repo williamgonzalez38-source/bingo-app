@@ -301,60 +301,82 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # 1. Limpieza de metadatos de WhatsApp (horas, marcas de tiempo tipo 10:42 p. m., ayer, hoy)
-                        texto_limpio = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', texto_wpp_unificado, flags=re.IGNORECASE)
+                        # 1. Limpiar metadatos de hora y marcas de tiempo comunes en la barra lateral de WhatsApp
+                        texto_limpio = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', ' [ HORA ] ', texto_wpp_unificado, flags=re.IGNORECASE)
                         texto_limpio = re.sub(r'\b(?:ayer|hoy)\b', '', texto_limpio, flags=re.IGNORECASE)
 
-                        # 2. Segmentación precisa por cada contacto individual basado en nombres o saltos estructurales de chat
-                        lineas_crudas = texto_limpio.split('\n')
-                        lineas = [l.strip() for l in lineas_crudas if l.strip()]
-
+                        # 2. Segmentación avanzada tolerante a texto continuo del navegador
+                        # Dividimos el texto buscando patrones donde un nuevo contacto usualmente inicia en WhatsApp Web
+                        # (Palabras capitalizadas seguidas o bloques separados por la etiqueta de hora que acabamos de marcar)
+                        fragmentos_brutos = re.split(r'(?:\s*\[ HORA \] \s*|\n+)', texto_limpio)
+                        
                         bloques_contactos = []
                         bloque_actual = []
 
-                        for linea in lineas:
-                            # Detectar líneas que actúan como nombres de contactos de WhatsApp al inicio de cada chat copiado
-                            es_nombre_chat = bool(re.match(r"^[A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?$", linea)) and linea.lower() not in ["buenas", "hola", "buenos", "tardes", "dias", "por", "favor", "gracias", "pago", "referencia", "lista", "carton"]
+                        for frag in fragmentos_brutos:
+                            frag_s = frag.strip()
+                            if not frag_s:
+                                continue
                             
-                            if es_nombre_chat and len(bloque_actual) >= 2:
+                            # Intentar detectar si este fragmento arranca con un posible nombre de contacto de WhatsApp
+                            es_nombre_potencial = bool(re.match(r"^[A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?$", frag_s)) and frag_s.lower() not in ["buenas", "hola", "buenos", "tardes", "dias", "por", "favor", "gracias", "pago", "referencia", "lista", "carton", "visto"]
+                            
+                            if es_nombre_potencial and len(bloque_actual) >= 2:
                                 bloques_contactos.append(bloque_actual)
-                                bloque_actual = [linea]
+                                bloque_actual = [frag_s]
                             else:
-                                bloque_actual.append(linea)
+                                bloque_actual.append(frag_s)
                         
                         if bloque_actual:
                             bloques_contactos.append(bloque_actual)
+
+                        # Si por el pegado continuo del navegador no se detectaron quiebres limpios, 
+                        # forzamos una separación basada en líneas o fragmentos de texto con nombres detectables.
+                        if len(bloques_contactos) <= 1:
+                            # Re-intentar separando por palabras con mayúscula inicial que parezcan nombres dentro del bloque
+                            lineas_aux = [l.strip() for l in texto_wpp_unificado.split('\n') if l.strip()]
+                            if len(lineas_aux) <= 1:
+                                # Si ni siquiera hay saltos de línea por '\n', dividimos por bloques de palabras largas
+                                lineas_aux = re.split(r'(?=[A-ZÁÉÍÓÚ][a-záéíóúñ]+\s+\d+)', texto_wpp_unificado)
+                            
+                            bloques_contactos = []
+                            for l_item in lineas_aux:
+                                if l_item.strip():
+                                    bloques_contactos.append([l_item.strip()])
 
                         registros_exitosos = 0
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
 
                         for idx_b, bloque in enumerate(bloques_contactos):
-                            if not bloque:
+                            cuerpo_completo = " ".join(bloque)
+                            if not cuerpo_completo.strip():
                                 continue
+
+                            # Extraer nombre del cliente del inicio del bloque o asignar uno genérico numerado
+                            palabras_bloque = cuerpo_completo.split()
+                            nombre_cliente = f"Cliente WhatsApp #{idx_b + 1}"
                             
-                            nombre_cliente = bloque[0]
-                            cuerpo_bloque = " ".join(bloque[1:]) if len(bloque) > 1 else bloque[0]
+                            if palabras_bloque:
+                                posible_nom = f"{palabras_bloque[0]} {palabras_bloque[1]}" if len(palabras_bloque) > 1 and palabras_bloque[1][0].isupper() else palabras_bloque[0]
+                                if posible_nom.lower() not in ["buenas", "hola", "buenos", "tardes", "dias", "por", "favor", "gracias"]:
+                                    nombre_cliente = posible_nom
 
-                            if not nombre_cliente or nombre_cliente.lower() in ["buenas", "hola", "buenos", "tardes", "dias"]:
-                                nombre_cliente = f"Cliente WhatsApp #{idx_b + 1}"
-                                cuerpo_bloque = " ".join(bloque)
-
-                            # 3. Analizar la acción específica de este contacto: números específicos vs cantidad al azar
-                            texto_lower = cuerpo_bloque.lower()
+                            # 3. Analizar números solicitados o cantidades al azar específicas para este contacto
+                            texto_lower = cuerpo_completo.lower()
                             pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme", "necesito"])
                             
-                            todos_numeros_cuerpo = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_bloque)]
-                            nums_wpp = [str(n) for n in todos_numeros_cuerpo if 1 <= n <= 630]
+                            todos_numeros_cuerpo = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_completo)]
+                            nums_wpp = [str(n) for n in todos_numeros_cuerpo if 1 <= n <= 630 and len(str(n)) <= 3]
 
                             cantidad_solicitada = 0
-                            if pide_azar or (len(todos_numeros_cuerpo) == 1 and todos_numeros_cuerpo[0] <= 100 and not any(k in cuerpo_bloque for k in ["carton", "cartones"] and todos_numeros_cuerpo[0] > 20)):
+                            if pide_azar or (len(todos_numeros_cuerpo) == 1 and todos_numeros_cuerpo[0] <= 100 and not any(k in cuerpo_completo for k in ["carton", "cartones"] and todos_numeros_cuerpo[0] > 20)):
                                 for n_val in todos_numeros_cuerpo:
                                     if n_val <= 630:
                                         cantidad_solicitada = n_val
                                         break
 
-                            # Si pide al azar o una cantidad sin enlistar números exactos, tomamos disponibles reales de la BD
+                            # Si pide al azar, tomamos disponibles reales de la base de datos
                             if (pide_azar and cantidad_solicitada > 0) or (len(nums_wpp) <= 1 and cantidad_solicitada > 1):
                                 c.execute("SELECT numeros FROM ventas")
                                 filas_actuales = c.fetchall()
@@ -370,17 +392,21 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     nums_wpp = [str(n) for n in sorted(random.sample(disponibles_reales, cantidad_solicitada))]
                                     
                             if nums_wpp:
+                                # Filtrar números de 6 dígitos que correspondan a referencias bancarias para que no se confundan con cartones
+                                ref_wpp_match = re.search(r"\b\d{6}\b", cuerpo_completo)
+                                ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
+                                
+                                if ref_wpp:
+                                    nums_wpp = [n for n in nums_wpp if n != ref_wpp]
+
                                 nums_wpp = [n for n in nums_wpp if 1 <= int(n) <= 630]
                                 
-                                # Extraer la referencia de pago de 6 dígitos propia de este contacto
-                                ref_wpp_match = re.search(r"\b\d{6}\b", "".join(bloque))
-                                ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
-
-                                estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
-                                
-                                c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                          (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
-                                registros_exitosos += 1
+                                if nums_wpp:
+                                    estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
+                                    
+                                    c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                              (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
+                                    registros_exitosos += 1
 
                         conn.commit()
                         conn.close()
