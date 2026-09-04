@@ -419,47 +419,41 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                             texto_lower = cuerpo_mensaje.lower()
                             
-                            palabras_clave_azar = [
-                                "azar", "aleatorio", "ocupados", "si no", "o al azar", 
-                                "dame", "colocame", "asigname", "mandame", "regalame", "ponme"
-                            ]
-                            pide_azar = any(palabra in texto_lower for palabra in palabras_clave_azar)
-
-                            todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
-                            candidatos_num = [n for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3]
-                            
-                            if ref_wpp and int(ref_wpp) in candidatos_num:
-                                candidatos_num = [n for n in candidatos_num if str(n) != ref_wpp]
-
+                            # Detección mejorada y robusta para pedidos al azar (ej: "4 cartones al azar")
                             cantidad_azar_solicitada = 0
-                            
-                            mapa_numeros_palabras = {
-                                "un": 1, "uno": 1, "una": 1,
-                                "dos": 2, "tres": 3, "cuatro": 4, 
-                                "cinco": 5, "seis": 6, "siete": 7, 
-                                "ocho": 8, "nueve": 9, "diez": 10
-                            }
-                            
-                            for palabra_num, val_num in mapa_numeros_palabras.items():
-                                if palabra_num in texto_lower:
-                                    cantidad_azar_solicitada = val_num
-                                    break
-
-                            if cantidad_azar_solicitada == 0:
-                                for palabra in ["dame", "colocame", "asigname", "mandame", "regalame", "ponme", "azar", "aleatorio"]:
-                                    if palabra in texto_lower:
-                                        idx_palabra = texto_lower.find(palabra)
-                                        texto_despues = texto_lower[idx_palabra:]
-                                        nums_despues = [int(n) for n in re.findall(r"\b\d+\b", texto_despues)]
-                                        if nums_despues:
-                                            posible_cant = nums_despues[0]
-                                            if posible_cant <= 50:
-                                                cantidad_azar_solicitada = posible_cant
-                                                if cantidad_azar_solicitada in candidatos_num:
-                                                    candidatos_num.remove(cantidad_azar_solicitada)
+                            match_azar_cant = re.search(r'(\d+)\s*(?:cartones|carton|boletos|ticket)?\s*(?:al\s*azar|aleatorio)', texto_lower)
+                            if match_azar_cant:
+                                cantidad_azar_solicitada = int(match_azar_cant.group(1))
+                            else:
+                                mapa_numeros_palabras = {
+                                    "un": 1, "uno": 1, "una": 1,
+                                    "dos": 2, "tres": 3, "cuatro": 4, 
+                                    "cinco": 5, "seis": 6, "siete": 7, 
+                                    "ocho": 8, "nueve": 9, "diez": 10
+                                }
+                                for palabra_num, val_num in mapa_numeros_palabras.items():
+                                    if palabra_num in texto_lower:
+                                        cantidad_azar_solicitada = val_num
                                         break
 
-                            # Si detecta que pide cantidad al azar y no trae cartones fijos válidos, se manda directo a pendiente de confirmación
+                                if cantidad_azar_solicitada == 0:
+                                    for palabra in ["dame", "colocame", "asigname", "mandame", "regalame", "ponme", "azar", "aleatorio"]:
+                                        if palabra in texto_lower:
+                                            idx_palabra = texto_lower.find(palabra)
+                                            texto_despues = texto_lower[idx_palabra:]
+                                            nums_despues = [int(n) for n in re.findall(r"\b\d+\b", texto_despues)]
+                                            if nums_despues:
+                                                posible_cant = nums_despues[0]
+                                                if posible_cant <= 50:
+                                                    cantidad_azar_solicitada = posible_cant
+                                            break
+
+                            # Filtrar candidatos numéricos válidos (excluyendo la referencia larga de pago si coincide)
+                            todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
+                            candidatos_num = [n for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3 and str(n) != ref_wpp]
+
+                            pide_azar = ("azar" in texto_lower or "aleatorio" in texto_lower or cantidad_azar_solicitada > 0)
+
                             if pide_azar and len(candidatos_num) == 0 and cantidad_azar_solicitada > 0:
                                 pendientes_cola.append({
                                     "tipo": "pendiente_azar",
@@ -537,32 +531,19 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             st.markdown("##### 🎲 Al Azar Manual y 🗑️ Borrar Base")
             with st.container(border=True):
                 cant_azar = st.number_input("Cartones al azar", min_value=1, max_value=630, value=1)
+                
                 if st.button("🎲 Asignar al Azar", use_container_width=True):
-                    conn_tmp = sqlite3.connect(DB_NAME)
-                    c_tmp = conn_tmp.cursor()
-                    c_tmp.execute("SELECT numeros FROM ventas")
-                    filas_actuales = c_tmp.fetchall()
-                    conn_tmp.close()
+                    if "pendientes_pendientes_wpp" not in st.session_state:
+                        st.session_state["pendientes_pendientes_wpp"] = []
                     
-                    ocupados_actuales = set()
-                    for f_nums, in filas_actuales:
-                        for n in re.findall(r"\b\d+\b", f_nums):
-                            ocupados_actuales.add(int(n))
-                    
-                    disponibles_reales = [n for n in range(1, 631) if n not in ocupados_actuales]
-                    
-                    if len(disponibles_reales) < cant_azar:
-                        st.error(f"Solo quedan {len(disponibles_reales)} cartones libres.")
-                    else:
-                        seleccionados = sorted(random.sample(disponibles_reales, cant_azar))
-                        conn = sqlite3.connect(DB_NAME)
-                        c = conn.cursor()
-                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), "Cliente Rápido", ", ".join(map(str, seleccionados)), cant_azar, "Pendiente por Cancelar", ""))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"¡Asignados {cant_azar} cartones al azar!")
-                        st.rerun()
+                    st.session_state["pendientes_pendientes_wpp"].append({
+                        "tipo": "pendiente_azar",
+                        "cliente": "Cliente Rápido",
+                        "cantidad": int(cant_azar),
+                        "ref": ""
+                    })
+                    st.success("¡Propuesta al azar generada! Revísala y confírmala en el listado de abajo.")
+                    st.rerun()
                 
                 st.markdown("---")
                 if st.button("🗑️ Borrar Toda la Base", type="primary", use_container_width=True):
@@ -668,7 +649,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                 st.rerun()
 
-                        # Generar propuesta aleatoria temporal para que el usuario la confirme
                         conn_tmp = sqlite3.connect(DB_NAME)
                         c_tmp = conn_tmp.cursor()
                         c_tmp.execute("SELECT numeros FROM ventas")
@@ -688,7 +668,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             if "azar_propuestas" not in st.session_state:
                                 st.session_state["azar_propuestas"] = {}
                             
-                            prop_key = f"{cliente}_{cant_pedida}"
+                            prop_key = f"{cliente}_{cant_pedida}_{id_r}"
                             if prop_key not in st.session_state["azar_propuestas"]:
                                 st.session_state["azar_propuestas"][prop_key] = sorted(random.sample(libres_reales, cant_pedida))
                             
