@@ -280,17 +280,17 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         col_inf1, col_inf2 = st.columns(2)
         
         with col_inf1:
-            st.markdown("##### 📥 Importar Directo desde WhatsApp")
+            st.markdown("##### 📥 Importar Múltiples Chats desde WhatsApp")
 
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
-                    "Pega aquí todo lo resaltado en WhatsApp", 
-                    placeholder="Pega aquí (Nombre del contacto arriba + mensaje abajo)..."
+                    "Pega aquí todo lo resaltado en WhatsApp (múltiples contactos)", 
+                    placeholder="Pega aquí el bloque completo de varios chats..."
                 )
                 
                 col_btn_w1, col_btn_w2 = st.columns(2)
                 with col_btn_w1:
-                    btn_wpp = st.form_submit_button("Procesar y Registrar", use_container_width=True)
+                    btn_wpp = st.form_submit_button("Procesar y Registrar Todos", use_container_width=True)
                 with col_btn_w2:
                     btn_borrar_wpp = st.form_submit_button("🗑️ Borrar", use_container_width=True)
                 
@@ -301,90 +301,95 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # 1. Eliminar por completo cualquier formato de hora (ej: 12:34 p. m., 4:15 am, 14:30) del texto crudo
-                        texto_sin_horas = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', texto_wpp_unificado, flags=re.IGNORECASE)
-                        texto_sin_horas = re.sub(r'\b(?:ayer|hoy)\b', '', texto_sin_horas, flags=re.IGNORECASE)
+                        # 1. Eliminar formato de hora y metadatos irrelevantes del texto crudo
+                        texto_limpio_global = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', texto_wpp_unificado, flags=re.IGNORECASE)
+                        texto_limpio_global = re.sub(r'\b(?:ayer|hoy)\b', '', texto_limpio_global, flags=re.IGNORECASE)
 
-                        # 2. Separar en líneas limpias
-                        lineas_crudas = texto_sin_horas.split('\n')
+                        # 2. Dividir el bloque en posibles fragmentos de contactos usando heurísticas de nombres en WhatsApp Web
+                        # Buscamos líneas que luzcan como nombres de contacto seguidas de contenido
+                        lineas_crudas = texto_limpio_global.split('\n')
                         lineas = [l.strip() for l in lineas_crudas if l.strip()]
 
-                        nombre_cliente = ""
-                        cuerpo_busqueda = texto_sin_horas
+                        # Agrupación inteligente por bloques de contactos individuales
+                        bloques_contactos = []
+                        bloque_actual = []
 
-                        # 3. EXTRACCIÓN ESTRICTA DEL NOMBRE (Primera línea o primera palabra real)
-                        if len(lineas) >= 1:
-                            nombre_cliente = lineas[0]
-                            if len(lineas) > 1:
-                                cuerpo_busqueda = " ".join(lineas[1:])
-                        else:
-                            texto_limpio_total = re.sub(r'\s+', ' ', texto_sin_horas).strip()
-                            match_primera_palabra = re.match(r"^([A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?)", texto_limpio_total)
-                            if match_primera_palabra:
-                                posible_nombre = match_primera_palabra.group(1)
-                                if posible_nombre.lower() not in ["buenas", "hola", "buenos", "tardes", "dias"]:
-                                    nombre_cliente = posible_nombre
-                                    cuerpo_busqueda = texto_limpio_total[len(posible_nombre):].strip()
-
-                        if not nombre_cliente:
-                            nombre_cliente = "Cliente WhatsApp"
-
-                        # 4. Análisis de la acción y los números solicitados
-                        texto_lower = cuerpo_busqueda.lower()
-                        pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme"])
-                        
-                        # Extraer todos los números enteros del cuerpo del mensaje
-                        todos_numeros_cuerpo = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_busqueda)]
-                        
-                        # Filtrar posibles cartones válidos (1 a 630)
-                        nums_wpp = [str(n) for n in todos_numeros_cuerpo if 1 <= n <= 630]
-
-                        # Detectar si está pidiendo una cantidad específica al azar (ej: "dame 5 cartones" o solo un número bajo que indique cantidad)
-                        cantidad_solicitada = 0
-                        if pide_azar or (len(todos_numeros_cuerpo) == 1 and todos_numeros_cuerpo[0] <= 100 and not any(n in cuerpo_busqueda for n in ["carton", "cartones"] and todos_numeros_cuerpo[0] > 20)):
-                            for n_val in todos_numeros_cuerpo:
-                                if n_val <= 630: # Asumimos que el número pequeño o indicado es la cantidad solicitada
-                                    cantidad_solicitada = n_val
-                                    break
-
-                        # Si pide al azar de forma clara o la cantidad solicitada representa un bloque aleatorio
-                        if (pide_azar and cantidad_solicitada > 0) or (len(nums_wpp) <= 1 and cantidad_solicitada > 1):
-                            conn_tmp = sqlite3.connect(DB_NAME)
-                            c_tmp = conn_tmp.cursor()
-                            c_tmp.execute("SELECT numeros FROM ventas")
-                            filas_actuales = c_tmp.fetchall()
-                            conn_tmp.close()
+                        for linea in lineas:
+                            # Detectar si una línea parece un nombre nuevo de contacto (ej: palabras en formato Título sin símbolos raros al inicio)
+                            is_nuevo_nombre = bool(re.match(r"^[A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?$", linea)) and linea.lower() not in ["buenas", "hola", "buenos", "tardes", "dias", "por", "favor", "gracias"]
                             
-                            ocupados_actuales = set()
-                            for f_nums, in filas_actuales:
-                                for n in re.findall(r"\b\d+\b", f_nums):
-                                    ocupados_actuales.add(int(n))
-                            
-                            disponibles_reales = [n for n in range(1, 631) if n not in ocupados_actuales]
-                            
-                            if len(disponibles_reales) < cantidad_solicitada:
-                                st.error(f"El cliente pide {cantidad_solicitada} cartones, pero solo quedan {len(disponibles_reales)} libres.")
-                                nums_wpp = []
+                            # Si detectamos un nombre y ya tenemos un bloque acumulado considerable, lo separamos como un nuevo contacto
+                            if is_nuevo_nombre and len(bloque_actual) >= 2:
+                                bloques_contactos.append(bloque_actual)
+                                bloque_actual = [linea]
                             else:
-                                nums_wpp = [str(n) for n in sorted(random.sample(disponibles_reales, cantidad_solicitada))]
+                                bloque_actual.append(linea)
+                        
+                        if bloque_actual:
+                            bloques_contactos.append(bloque_actual)
 
-                        if not nums_wpp:
-                            st.error("No se detectaron cartones válidos (1-630) ni cantidad solicitada en el texto pegado.")
-                        else:
-                            # Búsqueda de referencia de pago de 6 dígitos en el texto original
-                            ref_wpp_match = re.search(r"\b\d{6}\b", texto_wpp_unificado)
-                            ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
+                        registros_exitosos = 0
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
 
-                            estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
-                            conn = sqlite3.connect(DB_NAME)
-                            c = conn.cursor()
-                            c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
-                            conn.commit()
-                            conn.close()
+                        for bloque in bloques_contactos:
+                            if not bloque:
+                                continue
                             
-                            st.success(f"¡Registrado! Contacto: {nombre_cliente} | Cartones: {len(nums_wpp)}")
+                            nombre_cliente = bloque[0]
+                            cuerpo_bloque = " ".join(bloque[1:]) if len(bloque) > 1 else bloque[0]
+
+                            if not nombre_cliente or nombre_cliente.lower() in ["buenas", "hola", "buenos", "tardes", "dias"]:
+                                nombre_cliente = "Cliente WhatsApp"
+                                cuerpo_bloque = " ".join(bloque)
+
+                            # 3. Procesar cartones y peticiones al azar dentro del bloque de este contacto
+                            texto_lower = cuerpo_bloque.lower()
+                            pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme"])
+                            
+                            todos_numeros_cuerpo = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_bloque)]
+                            nums_wpp = [str(n) for n in todos_numeros_cuerpo if 1 <= n <= 630]
+
+                            cantidad_solicitada = 0
+                            if pide_azar or (len(todos_numeros_cuerpo) == 1 and todos_numeros_cuerpo[0] <= 100 and not any(n in cuerpo_bloque for n in ["carton", "cartones"] and todos_numeros_cuerpo[0] > 20)):
+                                for n_val in todos_numeros_cuerpo:
+                                    if n_val <= 630:
+                                        cantidad_solicitada = n_val
+                                        break
+
+                            if (pide_azar and cantidad_solicitada > 0) or (len(nums_wpp) <= 1 and cantidad_solicitada > 1):
+                                c.execute("SELECT numeros FROM ventas")
+                                filas_actuales = c.fetchall()
+                                
+                                ocupados_actuales = set()
+                                for f_nums, in filas_actuales:
+                                    for n in re.findall(r"\b\d+\b", f_nums):
+                                        ocupados_actuales.add(int(n))
+                                
+                                disponibles_reales = [n for n in range(1, 631) if n not in ocupados_actuales]
+                                
+                                if len(disponibles_reales) >= cantidad_solicitada:
+                                    nums_wpp = [str(n) for n in sorted(random.sample(disponibles_reales, cantidad_solicitada))]
+                                    
+                            if nums_wpp:
+                                nums_wpp = [n for n in nums_wpp if 1 <= int(n) <= 630]
+                                ref_wpp_match = re.search(r"\b\d{6}\b", "".join(bloque))
+                                ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
+
+                                estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
+                                
+                                c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                          (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_wpp), len(nums_wpp), estado_reg, ref_wpp))
+                                registros_exitosos += 1
+
+                        conn.commit()
+                        conn.close()
+
+                        if registros_exitosos > 0:
+                            st.success(f"¡Se registraron exitosamente {registros_exitosos} contactos por separado!")
                             st.rerun()
+                        else:
+                            st.error("No se pudieron extraer datos válidos o cartones de los chats seleccionados.")
 
         with col_inf2:
             st.markdown("##### 🎲 Al Azar Manual y 🗑️ Borrar Base")
