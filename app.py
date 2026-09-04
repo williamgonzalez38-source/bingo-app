@@ -301,48 +301,37 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # 1. Limpiar metadatos de hora y marcas de tiempo comunes en la barra lateral de WhatsApp
-                        texto_limpio = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', ' [ HORA ] ', texto_wpp_unificado, flags=re.IGNORECASE)
-                        texto_limpio = re.sub(r'\b(?:ayer|hoy)\b', '', texto_limpio, flags=re.IGNORECASE)
+                        # 1. Limpiar líneas basura típicas de la barra lateral de WhatsApp Web
+                        lineas_crudas = texto_wpp_unificado.split('\n')
+                        lineas_limpias = []
+                        
+                        for l in lineas_crudas:
+                            l_str = l.strip()
+                            if not l_str:
+                                continue
+                            # Ignorar líneas que sean exclusivamente horas, fechas o estados del sistema
+                            es_hora = bool(re.search(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', l_str, re.IGNORECASE))
+                            es_fecha_corta = l_str.lower() in ["ayer", "hoy", "visto por última vez", "en línea"]
+                            
+                            if not es_hora and not es_fecha_corta:
+                                lineas_limpias.append(l_str)
 
-                        # 2. Segmentación avanzada tolerante a texto continuo del navegador
-                        # Dividimos el texto buscando patrones donde un nuevo contacto usualmente inicia en WhatsApp Web
-                        # (Palabras capitalizadas seguidas o bloques separados por la etiqueta de hora que acabamos de marcar)
-                        fragmentos_brutos = re.split(r'(?:\s*\[ HORA \] \s*|\n+)', texto_limpio)
+                        # 2. Reconstruir y segmentar inteligentemente por bloques de contactos
+                        texto_unido_limpio = " ".join(lineas_limpias)
+                        
+                        # Dividir por fragmentos donde aparezcan horas o saltos lógicos fuertes
+                        fragmentos_brutos = re.split(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', texto_unido_limpio, flags=re.IGNORECASE)
                         
                         bloques_contactos = []
-                        bloque_actual = []
-
                         for frag in fragmentos_brutos:
                             frag_s = frag.strip()
-                            if not frag_s:
-                                continue
-                            
-                            # Intentar detectar si este fragmento arranca con un posible nombre de contacto de WhatsApp
-                            es_nombre_potencial = bool(re.match(r"^[A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?$", frag_s)) and frag_s.lower() not in ["buenas", "hola", "buenos", "tardes", "dias", "por", "favor", "gracias", "pago", "referencia", "lista", "carton", "visto"]
-                            
-                            if es_nombre_potencial and len(bloque_actual) >= 2:
-                                bloques_contactos.append(bloque_actual)
-                                bloque_actual = [frag_s]
-                            else:
-                                bloque_actual.append(frag_s)
-                        
-                        if bloque_actual:
-                            bloques_contactos.append(bloque_actual)
+                            if frag_s:
+                                bloques_contactos.append([frag_s])
 
-                        # Si por el pegado continuo del navegador no se detectaron quiebres limpios, 
-                        # forzamos una separación basada en líneas o fragmentos de texto con nombres detectables.
+                        # Si el texto vino completamente continuo sin saltos de línea claros
                         if len(bloques_contactos) <= 1:
-                            # Re-intentar separando por palabras con mayúscula inicial que parezcan nombres dentro del bloque
-                            lineas_aux = [l.strip() for l in texto_wpp_unificado.split('\n') if l.strip()]
-                            if len(lineas_aux) <= 1:
-                                # Si ni siquiera hay saltos de línea por '\n', dividimos por bloques de palabras largas
-                                lineas_aux = re.split(r'(?=[A-ZÁÉÍÓÚ][a-záéíóúñ]+\s+\d+)', texto_wpp_unificado)
-                            
-                            bloques_contactos = []
-                            for l_item in lineas_aux:
-                                if l_item.strip():
-                                    bloques_contactos.append([l_item.strip()])
+                            posibles_cortes = re.split(r'(?=[A-ZÁÉÍÓÚ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚ])', texto_unido_limpio)
+                            bloques_contactos = [[c.strip()] for c in posibles_cortes if c.strip()]
 
                         registros_exitosos = 0
                         conn = sqlite3.connect(DB_NAME)
@@ -353,16 +342,30 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             if not cuerpo_completo.strip():
                                 continue
 
-                            # Extraer nombre del cliente del inicio del bloque o asignar uno genérico numerado
+                            # 3. Extracción robusta del nombre del cliente (evitando horas, números o palabras de relleno)
                             palabras_bloque = cuerpo_completo.split()
                             nombre_cliente = f"Cliente WhatsApp #{idx_b + 1}"
                             
-                            if palabras_bloque:
-                                posible_nom = f"{palabras_bloque[0]} {palabras_bloque[1]}" if len(palabras_bloque) > 1 and palabras_bloque[1][0].isupper() else palabras_bloque[0]
-                                if posible_nom.lower() not in ["buenas", "hola", "buenos", "tardes", "dias", "por", "favor", "gracias"]:
-                                    nombre_cliente = posible_nom
+                            palabras_ignorar = [
+                                "buenas", "hola", "buenos", "tardes", "dias", "por", "favor", 
+                                "gracias", "pago", "referencia", "lista", "carton", "cartones", 
+                                "visto", "transferencia", "movil", "bs", "zelle", "efectivo"
+                            ]
 
-                            # 3. Analizar números solicitados o cantidades al azar específicas para este contacto
+                            candidatos_nombre = []
+                            for p in palabras_bloque:
+                                p_limpia = re.sub(r'[^a-zA-ZÁÉÍÓÚáéíóúñÑ]', '', p)
+                                if not p_limpia:
+                                    continue
+                                if len(candidatos_nombre) < 2 and p_limpia.lower() not in palabras_ignorar and not any(char.isdigit() for char in p):
+                                    candidatos_nombre.append(p)
+                                else:
+                                    break
+                            
+                            if candidatos_nombre:
+                                nombre_cliente = " ".join(candidatos_nombre)
+
+                            # 4. Analizar números solicitados o cantidades al azar específicas para este contacto
                             texto_lower = cuerpo_completo.lower()
                             pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme", "necesito"])
                             
@@ -392,7 +395,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     nums_wpp = [str(n) for n in sorted(random.sample(disponibles_reales, cantidad_solicitada))]
                                     
                             if nums_wpp:
-                                # Filtrar números de 6 dígitos que correspondan a referencias bancarias para que no se confundan con cartones
+                                # Aislar referencia bancaria de 6 dígitos para que no se confunda con cartones
                                 ref_wpp_match = re.search(r"\b\d{6}\b", cuerpo_completo)
                                 ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
                                 
