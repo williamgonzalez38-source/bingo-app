@@ -489,13 +489,17 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         st.rerun()
                 
                 st.markdown("---")
+                # BOTÓN DE BORRADO TOTAL DIRECTO E INSTANTÁNEO (Sin restricciones)
                 if st.button("🗑️ Borrar Toda la Base", type="primary", use_container_width=True):
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
                     c.execute("DELETE FROM ventas")
                     conn.commit()
                     conn.close()
-                    st.warning("Base de datos limpia.")
+                    # Limpiamos también cualquier cola de alertas en memoria de sesión
+                    if "pendientes_pendientes_wpp" in st.session_state:
+                        st.session_state["pendientes_pendientes_wpp"] = []
+                    st.success("¡Base de datos borrada por completo con éxito!")
                     st.rerun()
 
     st.divider()
@@ -536,12 +540,11 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                 st.text(f"Ref: {ref_txt}")
                 st.markdown(f"💰 **Total a Pagar: Bs. {monto_total:,.2f}**")
                 
-                # --- AQUÍ SE SEPARAN LAS ALERTAS EN DOS BLOQUES INDEPENDIENTES ---
+                # --- ALERTAS EN DOS BLOQUES INDEPENDIENTES ---
                 if notif_asociada:
                     tipo_n = notif_asociada["tipo"]
                     
                     if tipo_n == "pendiente_nombre_duplicado":
-                        # 1. ALERTA 1: Agregar números al registro (con botón OK / Acción)
                         if notif_asociada.get('nuevos_asignados'):
                             st.markdown("---")
                             st.markdown("🔔 **Alerta 1: Agregar números al registro**")
@@ -574,7 +577,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                     st.rerun()
 
-                        # 2. ALERTA 2: Números no disponibles / ocupados (Formato listo para copiar y pegar al cliente)
                         if notif_asociada.get('nuevos_no_disponibles'):
                             st.markdown("---")
                             st.markdown("🔔 **Alerta 2: Números no disponibles (Ocupados)**")
