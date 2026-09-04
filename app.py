@@ -280,7 +280,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             "nuevos_no_disponibles": [n for n in nums_val if n in cartones_ocupados],
                             "ref": ref_input.strip()
                         })
-                        st.warning(f"⚠️ El cliente '{cli_input.strip()}' ya existe. Se ha creado una notificación integrada en su tarjeta dentro del listado general abajo.")
+                        st.warning(f"⚠️ El cliente '{cli_input.strip()}' ya existe. Se han creado las alertas independientes en su tarjeta dentro del listado general abajo.")
                     else:
                         estado_reg = "Cancelado" if ref_input.strip() else "Pendiente por Cancelar"
                         nums_str = ", ".join(map(str, sorted(set(nums_val))))
@@ -452,7 +452,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             if "pendientes_pendientes_wpp" not in st.session_state:
                                 st.session_state["pendientes_pendientes_wpp"] = []
                             st.session_state["pendientes_pendientes_wpp"].extend(pendientes_cola)
-                            st.success("¡Mensajes procesados! Las notificaciones y opciones de asignación están listas en las tarjetas del listado general.")
+                            st.success("¡Mensajes procesados! Las alertas independientes están listas en las tarjetas del listado general.")
                             st.rerun()
                         else:
                             st.error("No se pudieron extraer datos válidos de los chats seleccionados.")
@@ -508,12 +508,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         if not busqueda or busqueda.lower() in texto_fila:
             filas_filtradas.append(r)
 
-    st.markdown("#### 📋 Listado General de Registros y Notificaciones por Cliente")
+    st.markdown("#### 📋 Listado General de Registros y Alertas Independientes por Cliente")
 
     # Obtener la cola de notificaciones pendientes de WhatsApp o registros manuales
     notificaciones_pendientes = st.session_state.get("pendientes_pendientes_wpp", [])
 
-    # Mostrar primero registros existentes con notificaciones integradas si coinciden
+    # Mostrar primero registros existentes con alertas independientes integradas si coinciden
     for r in filas_filtradas:
         id_r, _, cliente, numeros, cantidad, estado, referencia = r
         cant_cartones = len(re.findall(r"\b\d+\b", numeros))
@@ -536,40 +536,63 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                 st.text(f"Ref: {ref_txt}")
                 st.markdown(f"💰 **Total a Pagar: Bs. {monto_total:,.2f}**")
                 
-                # --- AQUÍ SE INTEGRAN TODAS LAS NOTIFICACIONES DIRECTAMENTE EN LA TARJETA DEL CLIENTE ---
+                # --- AQUÍ SE SEPARAN LAS ALERTAS EN DOS BLOQUES INDEPENDIENTES ---
                 if notif_asociada:
-                    st.markdown("---")
-                    st.markdown("🔔 **Notificación / Acción Pendiente:**")
-                    
                     tipo_n = notif_asociada["tipo"]
                     
                     if tipo_n == "pendiente_nombre_duplicado":
-                        st.warning(f"El cliente ya existe. Nuevos cartones libres: `{notif_asociada['nuevos_asignados']}` | Ocupados: `{notif_asociada['nuevos_no_disponibles']}`")
-                        col_nb1, col_nb2 = st.columns(2)
-                        with col_nb1:
-                            if st.button("✅ Sumar números al registro", key=f"sumar_dupl_gen_{id_r}", use_container_width=True):
-                                conn = sqlite3.connect(DB_NAME)
-                                c = conn.cursor()
-                                nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
-                                cartones_combinados = sorted(list(set(nums_db_lista + notif_asociada['nuevos_asignados'])))
-                                nums_combinados_str = ", ".join(map(str, cartones_combinados))
-                                ref_final = referencia if referencia else notif_asociada['ref']
-                                estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
-                                
-                                c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                          (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_r))
-                                conn.commit()
-                                conn.close()
-                                
-                                st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
-                                st.success("¡Registros sumados y guardados con éxito directamente en el listado!")
-                                st.rerun()
-                        with col_nb2:
-                            if st.button("❌ Descartar aviso", key=f"desc_dupl_gen_{id_r}", use_container_width=True):
-                                st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
+                        # 1. ALERTA 1: Agregar números al registro (con botón OK / Acción)
+                        if notif_asociada.get('nuevos_asignados'):
+                            st.markdown("---")
+                            st.markdown("🔔 **Alerta 1: Agregar números al registro**")
+                            st.info(f"Se detectaron nuevos cartones libres para agregar: `{notif_asociada['nuevos_asignados']}`")
+                            col_nb1, col_nb2 = st.columns(2)
+                            with col_nb1:
+                                if st.button("✅ OK / Sumar números al registro", key=f"sumar_dupl_gen_{id_r}", use_container_width=True):
+                                    conn = sqlite3.connect(DB_NAME)
+                                    c = conn.cursor()
+                                    nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
+                                    cartones_combinados = sorted(list(set(nums_db_lista + notif_asociada['nuevos_asignados'])))
+                                    nums_combinados_str = ", ".join(map(str, cartones_combinados))
+                                    ref_final = referencia if referencia else notif_asociada['ref']
+                                    estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
+                                    
+                                    c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
+                                              (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_r))
+                                    conn.commit()
+                                    conn.close()
+                                    
+                                    notif_asociada['nuevos_asignados'] = []
+                                    if not notif_asociada.get('nuevos_no_disponibles'):
+                                        st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
+                                    st.success("¡Registros sumados y guardados con éxito!")
+                                    st.rerun()
+                            with col_nb2:
+                                if st.button("❌ Descartar Alerta 1", key=f"desc_dupl_gen_{id_r}", use_container_width=True):
+                                    notif_asociada['nuevos_asignados'] = []
+                                    if not notif_asociada.get('nuevos_no_disponibles'):
+                                        st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
+                                    st.rerun()
+
+                        # 2. ALERTA 2: Números no disponibles / ocupados (Formato listo para copiar y pegar al cliente)
+                        if notif_asociada.get('nuevos_no_disponibles'):
+                            st.markdown("---")
+                            st.markdown("🔔 **Alerta 2: Números no disponibles (Ocupados)**")
+                            nums_ocupados_str = ", ".join(map(str, notif_asociada['nuevos_no_disponibles']))
+                            texto_copiable = f"Hola {cliente}, los siguientes cartones que pediste ya están ocupados: {nums_ocupados_str}. ¿Deseas otros al azar?"
+                            
+                            st.warning("Los siguientes cartones solicitados ya están ocupados:")
+                            st.code(texto_copiable, language="text")
+                            
+                            if st.button("🗑️ Cerrar Alerta 2", key=f"cerrar_ocupados_dupl_{id_r}", use_container_width=True):
+                                notif_asociada['nuevos_no_disponibles'] = []
+                                if not notif_asociada.get('nuevos_asignados'):
+                                    st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                 st.rerun()
 
                     elif tipo_n == "pendiente_azar":
+                        st.markdown("---")
+                        st.markdown("🔔 **Alerta de Solicitud al Azar**")
                         st.markdown(f"🎲 Solicitud al Azar de **{notif_asociada['cantidad']}** cartones.")
                         cant_gen_azar = st.number_input("Cantidad", min_value=1, max_value=630, value=int(notif_asociada['cantidad']), key=f"inp_azar_gen_{id_r}")
                         col_az1, col_az2 = st.columns(2)
@@ -609,6 +632,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 st.rerun()
 
                     elif tipo_n == "pendiente_azar_condicional":
+                        st.markdown("---")
+                        st.markdown("🔔 **Alerta de Condición al Azar**")
                         st.warning(f"Conflicto de cartones ocupados `{notif_asociada['ocupados']}`. El cliente pidió condición al azar.")
                         if st.button("✅ Asignar con reemplazo al azar", key=f"btn_cond_gen_{id_r}", use_container_width=True):
                             conn = sqlite3.connect(DB_NAME)
@@ -646,11 +671,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 st.rerun()
 
                     elif tipo_n == "asignado_o_aviso":
-                        if notif_asociada["asignados"]:
-                            st.success(f"✅ Nuevos cartones detectados: {notif_asociada['asignados']}")
+                        if notif_asociada.get("asignados"):
+                            st.markdown("---")
+                            st.markdown("🔔 **Alerta 1: Nuevos cartones detectados**")
+                            st.success(f"Nuevos cartones libres: {notif_asociada['asignados']}")
                             
-                            # Botón integrado para agregar y guardar de inmediato en la base de datos
-                            if st.button("✅ Agregar al Registro y Guardar en BD", key=f"btn_agregar_aviso_{id_r}", use_container_width=True):
+                            if st.button("✅ OK / Agregar al Registro y Guardar en BD", key=f"btn_agregar_aviso_{id_r}", use_container_width=True):
                                 conn = sqlite3.connect(DB_NAME)
                                 c = conn.cursor()
                                 nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
@@ -664,16 +690,26 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 conn.commit()
                                 conn.close()
 
-                                st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
-                                st.success("¡Cartones agregados y guardados directamente en la base de datos!")
+                                notif_asociada['asignados'] = []
+                                if not notif_asociada.get('no_disponibles'):
+                                    st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
+                                st.success("¡Cartones agregados y guardados con éxito!")
                                 st.rerun()
 
-                        if notif_asociada["no_disponibles"]:
-                            st.warning(f"⚠️ No disponibles: {notif_asociada['no_disponibles']}")
-                        
-                        if st.button("🗑️ Cerrar notificación", key=f"cerrar_aviso_gen_{id_r}", use_container_width=True):
-                            st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
-                            st.rerun()
+                        if notif_asociada.get("no_disponibles"):
+                            st.markdown("---")
+                            st.markdown("🔔 **Alerta 2: Números no disponibles (Ocupados)**")
+                            nums_ocupados_str = ", ".join(map(str, notif_asociada['no_disponibles']))
+                            texto_copiable = f"Hola {cliente}, los siguientes cartones que pediste ya están ocupados: {nums_ocupados_str}. ¿Deseas otros al azar?"
+                            
+                            st.warning("Los siguientes cartones solicitados ya están ocupados:")
+                            st.code(texto_copiable, language="text")
+                            
+                            if st.button("🗑️ Cerrar Alerta 2", key=f"cerrar_ocupados_aviso_{id_r}", use_container_width=True):
+                                notif_asociada['no_disponibles'] = []
+                                if not notif_asociada.get('asignados'):
+                                    st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
+                                st.rerun()
             
             with c_acciones:
                 with st.expander("✏️ Editar"):
@@ -765,23 +801,42 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             st.session_state["pendientes_pendientes_wpp"].remove(n_huerfana)
                             st.rerun()
 
-                elif tipo_nh == "asignado_o_aviso" and n_huerfana["asignados"]:
-                    st.success(f"✅ Cartones listos para registrar: {n_huerfana['asignados']}")
-                    if st.button("💾 Guardar este cliente en la base de datos", key=f"guardar_nuevo_cli_{idx_h}", use_container_width=True):
-                        conn = sqlite3.connect(DB_NAME)
-                        c = conn.cursor()
-                        ref_wpp = n_huerfana['ref']
-                        estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
-                        nums_str = ", ".join(map(str, n_huerfana['asignados']))
+                elif tipo_nh == "asignado_o_aviso":
+                    if n_huerfana.get("asignados"):
+                        st.markdown("🔔 **Alerta 1: Nuevos cartones detectados**")
+                        st.success(f"Cartones listos para registrar: {n_huerfana['asignados']}")
+                        if st.button("✅ OK / Guardar este cliente en la base de datos", key=f"guardar_nuevo_cli_{idx_h}", use_container_width=True):
+                            conn = sqlite3.connect(DB_NAME)
+                            c = conn.cursor()
+                            ref_wpp = n_huerfana['ref']
+                            estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
+                            nums_str = ", ".join(map(str, n_huerfana['asignados']))
 
-                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), n_huerfana['cliente'], nums_str, len(n_huerfana['asignados']), estado_reg, ref_wpp))
-                        conn.commit()
-                        conn.close()
+                            c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), n_huerfana['cliente'], nums_str, len(n_huerfana['asignados']), estado_reg, ref_wpp))
+                            conn.commit()
+                            conn.close()
 
-                        st.session_state["pendientes_pendientes_wpp"].remove(n_huerfana)
-                        st.success("¡Cliente guardado con éxito directamente en el listado!")
-                        st.rerun()
+                            n_huerfana['asignados'] = []
+                            if not n_huerfana.get('no_disponibles'):
+                                st.session_state["pendientes_pendientes_wpp"].remove(n_huerfana)
+                            st.success("¡Cliente guardado con éxito!")
+                            st.rerun()
+
+                    if n_huerfana.get("no_disponibles"):
+                        st.markdown("🔔 **Alerta 2: Números no disponibles (Ocupados)**")
+                        cli_nombre_h = n_huerfana['cliente']
+                        nums_ocupados_str = ", ".join(map(str, n_huerfana['no_disponibles']))
+                        texto_copiable = f"Hola {cli_nombre_h}, los siguientes cartones que pediste ya están ocupados: {nums_ocupados_str}. ¿Deseas otros al azar?"
+                        
+                        st.warning("Los siguientes cartones solicitados ya están ocupados:")
+                        st.code(texto_copiable, language="text")
+                        
+                        if st.button("🗑️ Cerrar Alerta 2", key=f"cerrar_ocupados_huerfana_{idx_h}", use_container_width=True):
+                            n_huerfana['no_disponibles'] = []
+                            if not n_huerfana.get('asignados'):
+                                st.session_state["pendientes_pendientes_wpp"].remove(n_huerfana)
+                            st.rerun()
 
 elif menu_seleccionado == "🎟️ Matriz (1-630)":
     st.markdown("#### Matriz de Cartones (1 al 630)")
