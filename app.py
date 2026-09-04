@@ -301,28 +301,32 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # Limpieza de espacios múltiples que deja el copiado de WhatsApp Web
-                        texto_limpio_total = re.sub(r'\s+', ' ', texto_wpp_unificado).strip()
-                        
-                        # Intentar separar por líneas reales primero (si el usuario hizo saltos)
+                        # Limpiar y separar líneas ignorando metadatos o espacios vacíos
                         lineas_crudas = texto_wpp_unificado.split('\n')
                         lineas = [l.strip() for l in lineas_crudas if l.strip() and not re.fullmatch(r'[\d:\s]+(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l.strip(), re.IGNORECASE)]
 
-                        nombre_cliente = "Cliente WhatsApp"
+                        nombre_cliente = ""
                         cuerpo_busqueda = texto_wpp_unificado
 
-                        # Si hay saltos de línea reales detectados
-                        if len(lineas) >= 2:
+                        # EXTRACCIÓN ESTRICTA: La primera línea remarcada es obligatoriamente el nombre
+                        if len(lineas) >= 1:
                             nombre_cliente = lineas[0]
-                            cuerpo_busqueda = " ".join(lineas[1:])
+                            # Si hay más líneas, el resto es el mensaje/pedido
+                            if len(lineas) > 1:
+                                cuerpo_busqueda = " ".join(lineas[1:])
                         else:
-                            # Si se copió todo seguido en una sola línea (como muestra la imagen)
-                            match_nombre = re.match(r"^([A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?)", texto_limpio_total)
-                            if match_nombre:
-                                posible_nombre = match_nombre.group(1)
+                            # Si se copió todo seguido en una sola línea (en bloque continuo)
+                            texto_limpio_total = re.sub(r'\s+', ' ', texto_wpp_unificado).strip()
+                            match_primera_palabra = re.match(r"^([A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?)", texto_limpio_total)
+                            if match_primera_palabra:
+                                posible_nombre = match_primera_palabra.group(1)
                                 if posible_nombre.lower() not in ["buenas", "hola", "buenos", "tardes", "dias"]:
                                     nombre_cliente = posible_nombre
                                     cuerpo_busqueda = texto_limpio_total[len(posible_nombre):].strip()
+
+                        # Respaldo estricto por si no se detectó nombre arriba
+                        if not nombre_cliente:
+                            nombre_cliente = "Cliente Desconocido"
 
                         # Detección de cartones o peticiones al azar en el cuerpo del mensaje
                         nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_busqueda) if 1 <= int(n) <= 630]
