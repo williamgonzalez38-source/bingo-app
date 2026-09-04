@@ -311,47 +311,42 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         lineas_crudas = texto_wpp_unificado.split('\n')
                         lineas = []
                         for l in lineas_crudas:
+                            # Limpieza profunda de espacios invisibles
                             l_limpia = l.strip()
                             if l_limpia:
                                 if not re.fullmatch(r'[\d:\s]+(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l_limpia, re.IGNORECASE):
                                     lineas.append(l_limpia)
 
-                        # Extracción precisa del nombre de contacto y cuerpo del mensaje
+                        # --- EXTRACCIÓN ROBUSTA Y DIRECTA DE LA PRIMERA LÍNEA (NOMBRE) ---
                         nombre_cliente = "Cliente WhatsApp"
                         cuerpo_busqueda = texto_wpp_unificado
 
                         if len(lineas) >= 1:
-                            candidato_linea1 = lineas[0]
-                            candidato_limpio = re.sub(r'\[.*?\]', '', candidato_linea1).strip()
-                            candidato_limpio = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', candidato_limpio, flags=re.IGNORECASE).strip()
-                            candidato_limpio = re.sub(r'^\+?[\d\s\-\(\)]{7,}', '', candidato_limpio).strip()
+                            # La primera línea obligatoriamente se toma como el nombre del contacto resaltado (ej: Alejandra)
+                            candidato_nombre = lineas[0]
+                            candidato_nombre = re.sub(r'\[.*?\]', '', candidato_nombre).strip()
+                            candidato_nombre = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', candidato_nombre, flags=re.IGNORECASE).strip()
                             
-                            if candidato_limpio and not candidato_limpio.isdigit() and len(candidato_limpio) > 1:
-                                nombre_cliente = candidato_limpio
+                            if candidato_nombre and len(candidato_nombre) > 0:
+                                nombre_cliente = candidato_nombre
+                                # El resto del contenido pasa a ser el mensaje para buscar los números o la cantidad al azar
                                 if len(lineas) > 1:
                                     cuerpo_busqueda = " ".join(lineas[1:])
                             elif len(lineas) > 1:
-                                candidato_linea2 = lineas[1]
-                                candidato_limpio2 = re.sub(r'\[.*?\]', '', candidato_linea2).strip()
-                                candidato_limpio2 = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', candidato_limpio2, flags=re.IGNORECASE).strip()
-                                
-                                if candidato_limpio2 and not candidato_limpio2.isdigit() and len(candidato_limpio2) > 1:
-                                    nombre_cliente = candidato_limpio2
-                                    if len(lineas) > 2:
-                                        cuerpo_busqueda = " ".join(lineas[2:])
-                                else:
-                                    cuerpo_busqueda = " ".join(lineas[1:])
+                                nombre_cliente = lineas[1].strip()
+                                if len(lineas) > 2:
+                                    cuerpo_busqueda = " ".join(lineas[2:])
 
-                        # Detección de cartones o peticiones al azar
+                        # Detección de cartones o peticiones al azar en el cuerpo del mensaje
                         nums_wpp = [n for n in re.findall(r"\b\d+\b", cuerpo_busqueda) if 1 <= int(n) <= 630]
                         texto_lower = cuerpo_busqueda.lower()
                         pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname"]) or len(nums_wpp) <= 2 and any(c in texto_lower for c in ["carton", "cartones", "anotame", "inscribeme"])
 
                         cantidad_solicitada = 0
-                        if pide_azar or len(nums_wpp) == 1 and int(nums_wpp[0]) <= 50:
+                        if pide_azar or len(nums_wpp) == 1 and int(nums_wpp[0]) <= 100:
                             for palabra in re.findall(r'\b\d+\b', cuerpo_busqueda):
                                 val_num = int(palabra)
-                                if val_num <= 100:
+                                if val_num <= 630: # Ampliado para capturar números grandes como 65 sin problemas
                                     cantidad_solicitada = val_num
                                     break
 
