@@ -269,7 +269,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
                     
-                    # Verificar si el cliente ya existe para unificarlo también en el registro manual
                     c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (cli_input.strip(),))
                     cliente_existente = c.fetchone()
                     
@@ -277,18 +276,16 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         id_existente, nums_existentes_str, ref_existente = cliente_existente
                         nums_existentes = [int(n) for n in re.findall(r"\b\d+\b", nums_existentes_str)]
                         
-                        # Combinar sin duplicados
                         nuevos_unicos = sorted(list(set(nums_existentes + nums_val)))
                         total_nums_combinados = len(nuevos_unicos)
                         nums_combinados_str = ", ".join(map(str, nuevos_unicos))
                         
-                        # Mantener referencia si ya la tenía o agregar la nueva
                         ref_final = ref_existente if ref_existente else ref_input.strip()
                         estado_reg_final = "Cancelado" if ref_final else "Pendiente por Cancelar"
                         
                         c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
                                   (nums_combinados_str, total_nums_combinados, estado_reg_final, ref_final, id_existente))
-                        st.success(f"¡Cliente existente '{cli_input.strip()}' actualizado! Se le sumaron los nuevos cartones en un solo registro.")
+                        st.success(f"¡Cliente existente '{cli_input.strip()}' unificado y actualizado!")
                     else:
                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(nums_val), len(nums_val), estado_reg, ref_input.strip()))
@@ -334,7 +331,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         lineas = texto_wpp_unificado.split('\n')
                         registros_exitosos = 0
                         
-                        # Cargar ocupados actuales de la base de datos para arrancar la cascada
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
                         c.execute("SELECT numeros FROM ventas")
@@ -344,7 +340,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             for n in re.findall(r"\b\d+\b", f_nums):
                                 ocupados_en_memoria.add(int(n))
 
-                        reporte_procesamiento = []
+                        # Lista para alertas integradas en la misma sesión
+                        alertas_importacion = []
 
                         for linea in lineas:
                             linea_s = linea.strip()
@@ -354,13 +351,11 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             nombre_cliente = ""
                             cuerpo_mensaje = ""
 
-                            # 1. Detectar formato con corchetes [hora, fecha] Nombre: Mensaje
                             match_chat = re.search(r'\[.*?\]\s*([^:]+):\s*(.*)', linea_s)
                             if match_chat:
                                 nombre_cliente = match_chat.group(1).strip()
                                 cuerpo_mensaje = match_chat.group(2).strip()
                             else:
-                                # 2. Detectar formato simple con nombre y dos puntos (Ej: Marianny Gutierrez: 65 - 71)
                                 match_simple = re.search(r'^([^:]+):\s*(.*)', linea_s)
                                 if match_simple and not linea_s.startswith("http") and len(match_simple.group(1).split()) <= 4:
                                     nombre_cliente = match_simple.group(1).strip()
@@ -369,23 +364,17 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     nombre_cliente = "Cliente WhatsApp"
                                     cuerpo_mensaje = linea_s
 
-                            # Extraer números del mensaje
                             todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
-                            
-                            # Aislar referencia bancaria de 6 dígitos si existe
                             ref_wpp_match = re.search(r"\b\d{6}\b", cuerpo_mensaje)
                             ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
-                            # Filtrar solo rango válido (1-630) y descartar la referencia si coincide
                             candidatos_num = [n for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3]
                             if ref_wpp:
                                 candidatos_num = [n for n in candidatos_num if str(n) != ref_wpp]
 
-                            # Verificar cuáles solicitados están ocupados ya en memoria (en cascada)
                             cartones_asignados = []
                             cartones_no_disponibles = []
 
-                            # Ver si pide al azar
                             texto_lower = cuerpo_mensaje.lower()
                             pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme", "necesito"])
                             
@@ -407,12 +396,11 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     else:
                                         cartones_no_disponibles.append(num_req)
 
-                            # Si se pudieron asignar cartones, unificar o guardar en base de datos
+                            # Guardar e unificar directamente en la BD principal
                             if cartones_asignados:
                                 for n in cartones_asignados:
-                                    ocupados_en_memoria.add(n) # Actualiza la memoria interna al instante para el siguiente
+                                    ocupados_en_memoria.add(n)
 
-                                # Verificar si el cliente ya existe en la base de datos actual para unificar en un solo registro
                                 c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (nombre_cliente,))
                                 cliente_db_existente = c.fetchone()
 
@@ -420,11 +408,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     id_db, nums_db_str, ref_db = cliente_db_existente
                                     nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", nums_db_str)]
                                     
-                                    # Combinar los cartones viejos con los nuevos sin duplicar
                                     cartones_combinados = sorted(list(set(nums_db_lista + cartones_asignados)))
                                     nums_combinados_str = ", ".join(map(str, cartones_combinados))
                                     
-                                    # Mantener o actualizar referencia y estado
                                     ref_final = ref_db if ref_db else ref_wpp
                                     estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
                                     
@@ -437,20 +423,17 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 
                                 registros_exitosos += 1
 
-                            # Registrar detalle para el reporte de la sesión
-                            reporte_procesamiento.append({
-                                "cliente": nombre_cliente,
-                                "asignados": cartones_asignados,
-                                "no_disponibles": cartones_no_disponibles
-                            })
+                            if cartones_no_disponibles:
+                                alert_txt = f"Hola {nombre_cliente}, los siguientes cartones ya no están disponibles: " + ", ".join(map(str, cartones_no_disponibles)) + ". ¿Deseas elegir otros?"
+                                alertas_importacion.append(alert_txt)
 
                         conn.commit()
                         conn.close()
 
                         if registros_exitosos > 0:
-                            st.success(f"¡Proceso en cascada completado! Se procesaron {len(reporte_procesamiento)} líneas de chat.")
+                            st.success(f"¡Proceso completado! Se guardaron/unificaron los registros en la base de datos.")
                             st.session_state["wpp_version"] += 1
-                            st.session_state["reporte_wpp_activo"] = reporte_procesamiento
+                            st.session_state["alertas_wpp_activas"] = alertas_importacion
                             st.rerun()
                         else:
                             st.error("No se pudieron extraer datos válidos o cartones de los chats seleccionados.")
@@ -496,74 +479,55 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.warning("Base de datos limpia.")
                     st.rerun()
 
-    # Mostrar reporte de alertas y botones de copia rápida por cada cliente si existen resultados recientes
-    if "reporte_wpp_activo" in st.session_state and st.session_state["reporte_wpp_activo"]:
+    # Panel de Alertas Integradas: Al hacer clic en copiar, el aviso se borra automáticamente de la pantalla
+    if "alertas_wpp_activas" in st.session_state and st.session_state["alertas_wpp_activas"]:
         st.markdown("---")
-        st.markdown("#### 🚨 Alertas de Disponibilidad y Cartones Ocupados en esta Importación")
-        st.caption("Aquí tienes el detalle por cada contacto procesado. Si algún número ya estaba ocupado, puedes copiarlo con un clic para avisarle al cliente.")
+        st.markdown("#### 🚨 Cartones No Disponibles en la última importación")
+        st.caption("Copia el aviso para enviarlo al cliente por WhatsApp. Al hacerlo, la alerta desaparecerá de aquí.")
 
-        for idx, rep in enumerate(st.session_state["reporte_wpp_activo"]):
-            cli_n = rep["cliente"]
-            asig_n = rep["asignados"]
-            no_disp = rep["no_disponibles"]
+        alertas_a_mantener = []
+        for idx, texto_alerta in enumerate(st.session_state["alertas_wpp_activas"]):
+            texto_js = texto_alerta.replace('"', '\\"')
+            btn_id = f"alerta_btn_{idx}"
+            div_id = f"alerta_div_{idx}"
 
-            with st.container(border=True):
-                col_rep1, col_rep2 = st.columns([3, 1])
-                with col_rep1:
-                    st.write(f"**👤 Cliente:** {cli_n}")
-                    txt_asig = ", ".join(map(str, asig_n)) if asig_n else "Ninguno"
-                    st.caption(f"✅ **Cartones asignados y guardados:** {txt_asig}")
-                    
-                    if no_disp:
-                        txt_nodisp = ", ".join(map(str, no_disp))
-                        st.markdown(f"❌ <span style='color: #f87171; font-weight: bold;'>Cartones NO disponibles (ocupados): [{txt_nodisp}]</span>", unsafe_allow_html=True)
-                    else:
-                        st.markdown("✨ <span style='color: #4ade80;'>¡Todos los cartones solicitados estaban libres! Sin cruces.</span>", unsafe_allow_html=True)
+            html_alerta_dinamica = f"""
+            <div id="{div_id}" style="background-color: #1e293b; border-left: 4px solid #dc2626; padding: 12px; border-radius: 6px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; font-family: sans-serif;">
+                <span style="color: #f8fafc; font-size: 13px; padding-right: 10px;">{texto_alerta}</span>
+                <button id="{btn_id}" onclick="copiarYBorrar_{idx}()" style="
+                    background-color: #dc2626;
+                    color: white;
+                    border: none;
+                    padding: 6px 12px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    white-space: nowrap;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                ">📋 Copiar y Borrar</button>
+            </div>
+            <script>
+            async function copiarYBorrar_{idx}() {{
+                try {{
+                    await navigator.clipboard.writeText("{texto_js}");
+                    const btn = document.getElementById("{btn_id}");
+                    const caja = document.getElementById("{div_id}");
+                    btn.style.backgroundColor = '#16a34a';
+                    btn.innerText = '¡Copiado!';
+                    setTimeout(() => {{
+                        caja.style.display = 'none';
+                    }}, 800);
+                }} catch (err) {{
+                    console.error(err);
+                }}
+            }}
+            </script>
+            """
+            components.html(html_alerta_dinamica, height=65)
 
-                with col_rep2:
-                    if no_disp:
-                        texto_a_copiar = f"Hola {cli_n}, los siguientes cartones ya no están disponibles: " + ", ".join(map(str, no_disp)) + ". ¿Deseas elegir otros?"
-                        texto_js = texto_a_copiar.replace('"', '\\"')
-                        
-                        btn_html_id = f"copiar_cli_{idx}"
-                        html_btn_cliente = f"""
-                        <div style="margin-top: 5px;">
-                            <button id="{btn_html_id}" onclick="copiarTexto_{idx}()" style="
-                                background-color: #dc2626;
-                                color: white;
-                                border: none;
-                                padding: 6px 10px;
-                                font-size: 12px;
-                                font-weight: bold;
-                                border-radius: 6px;
-                                cursor: pointer;
-                                width: 100%;
-                                text-align: center;
-                                font-family: sans-serif;
-                                box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-                            ">📋 Copiar No Disp.</button>
-                        </div>
-                        <script>
-                        async function copiarTexto_{idx}() {{
-                            try {{
-                                await navigator.clipboard.writeText("{texto_js}");
-                                const btn = document.getElementById("{btn_html_id}");
-                                btn.style.backgroundColor = '#16a34a';
-                                btn.innerText = '¡Copiado!';
-                                setTimeout(() => {{
-                                    btn.style.backgroundColor = '#dc2626';
-                                    btn.innerText = '📋 Copiar No Disp.';
-                                }}, 3000);
-                            }} catch (err) {{
-                                console.error(err);
-                            }}
-                        }}
-                        </script>
-                        """
-                        components.html(html_btn_cliente, height=50)
-
-        if st.button("🧹 Limpiar Alertas de Pantalla"):
-            del st.session_state["reporte_wpp_activo"]
+        if st.button("🧹 Limpiar Todas las Alertas"):
+            del st.session_state["alertas_wpp_activas"]
             st.rerun()
 
     st.divider()
