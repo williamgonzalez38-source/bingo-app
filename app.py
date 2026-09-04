@@ -561,7 +561,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 conn.commit()
                                 conn.close()
                                 
-                                # Remover de pendientes
                                 st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                 st.success("¡Registros sumados y guardados con éxito directamente en el listado!")
                                 st.rerun()
@@ -648,7 +647,27 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                     elif tipo_n == "asignado_o_aviso":
                         if notif_asociada["asignados"]:
-                            st.success(f"✅ Nuevos asignados: {notif_asociada['asignados']}")
+                            st.success(f"✅ Nuevos cartones detectados: {notif_asociada['asignados']}")
+                            
+                            # Botón integrado para agregar y guardar de inmediato en la base de datos
+                            if st.button("✅ Agregar al Registro y Guardar en BD", key=f"btn_agregar_aviso_{id_r}", use_container_width=True):
+                                conn = sqlite3.connect(DB_NAME)
+                                c = conn.cursor()
+                                nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
+                                cartones_combinados = sorted(list(set(nums_db_lista + notif_asociada['asignados'])))
+                                nums_combinados_str = ", ".join(map(str, cartones_combinados))
+                                ref_final = referencia if referencia else notif_asociada['ref']
+                                estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
+
+                                c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
+                                          (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_r))
+                                conn.commit()
+                                conn.close()
+
+                                st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
+                                st.success("¡Cartones agregados y guardados directamente en la base de datos!")
+                                st.rerun()
+
                         if notif_asociada["no_disponibles"]:
                             st.warning(f"⚠️ No disponibles: {notif_asociada['no_disponibles']}")
                         
