@@ -298,7 +298,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             submitted = st.form_submit_button("Guardar Registro")
             
             if submitted:
-                # Mantener el orden exacto de aparición del resaltado (sin ordenar de menor a mayor)
+                # Mantener estrictamente el orden de selección (resaltado) sin ordenar de menor a mayor
                 nums_val = []
                 seen_nums = set()
                 for n_str in re.findall(r"\b\d+\b", nums_input):
@@ -482,7 +482,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         })
                                 continue
 
-                            # Procesamiento de cartones específicos manteniendo el orden exacto del resaltado
+                            # Procesamiento de cartones específicos manteniendo el orden exacto del texto resaltado
                             todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", bloque_s)]
                             candidatos_num = []
                             seen_candidatos = set()
@@ -614,7 +614,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     c = conn.cursor()
                                     nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
                                     
-                                    # Combinar manteniendo el orden de los existentes y agregando los nuevos en orden de selección
                                     combinados = nums_db_lista.copy()
                                     for n_nuevo in notif_asociada['nuevos_asignados']:
                                         if n_nuevo not in combinados:
