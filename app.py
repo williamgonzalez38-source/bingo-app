@@ -295,7 +295,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             with col_f3:
                 ref_input = st.text_input("Últimos 6 dígitos", max_chars=6)
             
-            submitted = st.form_submit_button("Guardar Registro")
+            submitted = st.form_submit_button("Guardار Registro")
             
             if submitted:
                 nums_val = [int(n) for n in re.findall(r"\b\d+\b", nums_input) if 1 <= int(n) <= 630]
@@ -368,7 +368,11 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        lineas = texto_wpp_unificado.split('\n')
+                        # Agrupación inteligente por bloques de mensajes / chats
+                        bloques_mensajes = re.split(r'\n(?=[a-zA-ZáéíóúÁÉÍÓÚñÑ]+\s*:|\[\d{2}/\d{2}/\d{4})', texto_wpp_unificado)
+                        if not bloques_mensajes:
+                            bloques_mensajes = [texto_wpp_unificado]
+
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
                         c.execute("SELECT numeros FROM ventas")
@@ -379,47 +383,42 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 ocupados_en_memoria.add(int(n))
 
                         pendientes_cola = []
-                        ultimo_cliente = ""
+                        ultimo_cliente = "Cliente WhatsApp"
 
-                        for linea in lineas:
-                            linea_s = linea.strip()
-                            if not linea_s:
+                        for bloque in bloques_mensajes:
+                            bloque_s = bloque.strip()
+                            if not bloque_s:
                                 continue
 
-                            nombre_cliente = ""
-                            cuerpo_mensaje = ""
+                            texto_lower = bloque_s.lower()
 
-                            match_chat = re.search(r'\[.*?\]\s*([^:]+):\s*(.*)', linea_s)
+                            # Detectar nombre del cliente en el bloque
+                            nombre_cliente = ""
+                            match_chat = re.search(r'\[.*?\]\s*([^:]+):', bloque_s)
                             if match_chat:
                                 nombre_cliente = match_chat.group(1).strip()
-                                cuerpo_mensaje = match_chat.group(2).strip()
                             else:
-                                match_simple = re.search(r'^([^:]+):\s*(.*)', linea_s)
-                                if match_simple and not linea_s.startswith("http") and len(match_simple.group(1).split()) <= 4:
+                                match_simple = re.search(r'^([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+):', bloque_s)
+                                if match_simple and len(match_simple.group(1).split()) <= 4:
                                     nombre_cliente = match_simple.group(1).strip()
-                                    cuerpo_mensaje = match_simple.group(2).strip()
-                                else:
-                                    if ultimo_cliente:
-                                        nombre_cliente = ultimo_cliente
-                                        cuerpo_mensaje = linea_s
-                                    else:
-                                        nombre_cliente = "Cliente WhatsApp"
-                                        cuerpo_mensaje = linea_s
 
-                            if nombre_cliente and nombre_cliente != "Cliente WhatsApp":
+                            if nombre_cliente:
                                 ultimo_cliente = nombre_cliente
+                            else:
+                                nombre_cliente = ultimo_cliente
 
-                            ref_wpp_match = re.search(r"\b\d{6,}\b", cuerpo_mensaje)
-                            if not ref_wpp_match:
-                                ref_wpp_match = re.search(r"\b\d{4,6}\b", cuerpo_mensaje)
-                            
+                            # Extraer referencia bancaria de 4 a 6 dígitos en el bloque
+                            ref_wpp_match = re.search(r'(?:operación|operacion|ref|referencia)[:\s]*(\d{4,12})', texto_lower)
                             ref_wpp = ""
                             if ref_wpp_match:
-                                ref_wpp = ref_wpp_match.group(0)[-6:]
+                                ref_wpp = ref_wpp_match.group(1)[-6:]
+                            else:
+                                # Buscar cualquier número de referencia largo típico de pago móvil
+                                match_nums_largos = re.findall(r'\b\d{6,}\b', bloque_s)
+                                if match_nums_largos:
+                                    ref_wpp = match_nums_largos[0][-6:]
 
-                            texto_lower = cuerpo_mensaje.lower()
-                            
-                            # Detección mejorada y robusta para pedidos al azar (ej: "4 cartones al azar")
+                            # Detectar cantidad pedida al azar (Ej: "4 cartones al azar", "3 al azar")
                             cantidad_azar_solicitada = 0
                             match_azar_cant = re.search(r'(\d+)\s*(?:cartones|carton|boletos|ticket)?\s*(?:al\s*azar|aleatorio)', texto_lower)
                             if match_azar_cant:
@@ -437,7 +436,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         break
 
                                 if cantidad_azar_solicitada == 0:
-                                    for palabra in ["dame", "colocame", "asigname", "mandame", "regalame", "ponme", "azar", "aleatorio"]:
+                                    for palabra in ["dame", "colocame", "asigname", "mandame", "regalame", "ponme"]:
                                         if palabra in texto_lower:
                                             idx_palabra = texto_lower.find(palabra)
                                             texto_despues = texto_lower[idx_palabra:]
@@ -448,20 +447,43 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                                     cantidad_azar_solicitada = posible_cant
                                             break
 
-                            # Filtrar candidatos numéricos válidos (excluyendo la referencia larga de pago si coincide)
-                            todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
-                            candidatos_num = [n for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3 and str(n) != ref_wpp]
-
                             pide_azar = ("azar" in texto_lower or "aleatorio" in texto_lower or cantidad_azar_solicitada > 0)
 
-                            if pide_azar and len(candidatos_num) == 0 and cantidad_azar_solicitada > 0:
-                                pendientes_cola.append({
-                                    "tipo": "pendiente_azar",
-                                    "cliente": nombre_cliente,
-                                    "cantidad": cantidad_azar_solicitada,
-                                    "ref": ref_wpp
-                                })
+                            if pide_azar and cantidad_azar_solicitada > 0:
+                                # Verificar si ya existe el cliente en la BD para agregarlo como pendiente o insertarlo directo con azar
+                                c.execute("SELECT id, numeros FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (nombre_cliente,))
+                                cliente_db_existente = c.fetchone()
+
+                                if cliente_db_existente:
+                                    pendientes_cola.append({
+                                        "tipo": "pendiente_azar",
+                                        "cliente": nombre_cliente,
+                                        "cantidad": cantidad_azar_solicitada,
+                                        "ref": ref_wpp
+                                    })
+                                else:
+                                    # Generar directamente los cartones al azar de inmediato
+                                    libres_disponibles = [n for n in range(1, 631) if n not in ocupados_en_memoria]
+                                    if len(libres_disponibles) >= cantidad_azar_solicitada:
+                                        cartones_asignados = sorted(random.sample(libres_disponibles, cantidad_azar_solicitada))
+                                        for n in cartones_asignados:
+                                            ocupados_en_memoria.add(n)
+
+                                        estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
+                                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, cartones_asignados)), len(cartones_asignados), estado_reg, ref_wpp))
+                                    else:
+                                        pendientes_cola.append({
+                                            "tipo": "pendiente_azar",
+                                            "cliente": nombre_cliente,
+                                            "cantidad": cantidad_azar_solicitada,
+                                            "ref": ref_wpp
+                                        })
                                 continue
+
+                            # Procesamiento normal para cartones específicos fijos
+                            todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", bloque_s)]
+                            candidatos_num = [n for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3 and str(n) != ref_wpp]
 
                             cartones_asignados = []
                             cartones_no_disponibles = []
@@ -472,35 +494,27 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 else:
                                     cartones_no_disponibles.append(num_req)
 
-                            c.execute("SELECT id FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (nombre_cliente,))
-                            cliente_db_existente = c.fetchone()
+                            if cartones_asignados or cartones_no_disponibles:
+                                c.execute("SELECT id FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (nombre_cliente,))
+                                cliente_db_existente = c.fetchone()
 
-                            if cliente_db_existente:
-                                pendientes_cola.append({
-                                    "tipo": "pendiente_nombre_duplicado",
-                                    "cliente": nombre_cliente,
-                                    "nuevos_asignados": cartones_asignados,
-                                    "nuevos_no_disponibles": cartones_no_disponibles,
-                                    "ref": ref_wpp
-                                })
-                            elif cartones_no_disponibles and pide_azar:
-                                pendientes_cola.append({
-                                    "tipo": "pendiente_azar_condicional",
-                                    "cliente": nombre_cliente,
-                                    "solicitados": candidatos_num,
-                                    "ocupados": cartones_no_disponibles,
-                                    "libres": cartones_asignados,
-                                    "ref": ref_wpp
-                                })
-                            else:
-                                if cartones_asignados:
-                                    for n in cartones_asignados:
-                                        ocupados_en_memoria.add(n)
+                                if cliente_db_existente:
+                                    pendientes_cola.append({
+                                        "tipo": "pendiente_nombre_duplicado",
+                                        "cliente": nombre_cliente,
+                                        "nuevos_asignados": cartones_asignados,
+                                        "nuevos_no_disponibles": cartones_no_disponibles,
+                                        "ref": ref_wpp
+                                    })
+                                else:
+                                    if cartones_asignados:
+                                        for n in cartones_asignados:
+                                            ocupados_en_memoria.add(n)
 
-                                    estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
-                                    c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                              (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, sorted(cartones_asignados))), len(cartones_asignados), estado_reg, ref_wpp))
-                                    
+                                        estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
+                                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, sorted(cartones_asignados))), len(cartones_asignados), estado_reg, ref_wpp))
+
                                     if cartones_no_disponibles:
                                         pendientes_cola.append({
                                             "tipo": "solo_no_disponibles",
@@ -508,13 +522,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                             "no_disponibles": cartones_no_disponibles,
                                             "ref": ref_wpp
                                         })
-                                elif cartones_no_disponibles:
-                                    pendientes_cola.append({
-                                        "tipo": "solo_no_disponibles",
-                                        "cliente": nombre_cliente,
-                                        "no_disponibles": cartones_no_disponibles,
-                                        "ref": ref_wpp
-                                    })
 
                         conn.commit()
                         conn.close()
@@ -524,7 +531,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             st.session_state["pendientes_pendientes_wpp"] = []
                         st.session_state["pendientes_pendientes_wpp"].extend(pendientes_cola)
                         
-                        st.success("¡Chats procesados! Revisa las alertas de confirmación pendientes.")
+                        st.success("¡Chats procesados correctamente!")
                         st.rerun()
 
         with col_inf2:
