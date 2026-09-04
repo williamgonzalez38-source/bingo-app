@@ -298,7 +298,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             submitted = st.form_submit_button("Guardar Registro")
             
             if submitted:
-                # Mantener estrictamente el orden de selección (resaltado) sin ordenar de menor a mayor
                 nums_val = []
                 seen_nums = set()
                 for n_str in re.findall(r"\b\d+\b", nums_input):
@@ -399,14 +398,29 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                             texto_lower = bloque_s.lower()
 
+                            # Extracción estricta y mejorada del nombre del contacto
                             nombre_cliente = ""
+                            
+                            # 1. Buscar patrón de WhatsApp tipo [Fecha] Nombre:
                             match_chat = re.search(r'\[.*?\]\s*([^:]+):', bloque_s)
                             if match_chat:
                                 nombre_cliente = match_chat.group(1).strip()
                             else:
+                                # 2. Buscar si la primera línea o inicio tiene un formato "Nombre:" estricto
                                 match_simple = re.search(r'^([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+):', bloque_s)
                                 if match_simple and len(match_simple.group(1).split()) <= 4:
                                     nombre_cliente = match_simple.group(1).strip()
+                                else:
+                                    # 3. Búsqueda estricta para un solo registro resaltado: tomar la primera línea si no tiene números o si es texto limpio
+                                    lineas_bloque = [l.strip() for l in bloque_s.split('\n') if l.strip()]
+                                    if lineas_bloque:
+                                        primera_linea = lineas_bloque[0]
+                                        # Si la primera línea no contiene puros números y es corta (nombre de contacto)
+                                        if not re.fullmatch(r'[\d,\s\-]+', primera_linea) and len(primera_linea.split()) <= 4:
+                                            # Limpiar corchetes de fecha si los trae sueltos
+                                            primera_limpia = re.sub(r'\[.*?\]', '', primera_linea).replace(':', '').strip()
+                                            if primera_limpia:
+                                                nombre_cliente = primera_limpia
 
                             if nombre_cliente:
                                 ultimo_cliente = nombre_cliente
