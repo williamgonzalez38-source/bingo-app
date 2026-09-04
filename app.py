@@ -282,9 +282,15 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         with col_inf1:
             st.markdown("##### 📥 Importar Selección Múltiple de WhatsApp (Secuencial en Cascada)")
 
+            # Inicializar estado para el texto de WhatsApp si no existe
+            if "texto_wpp_unificado" not in st.session_state:
+                st.session_state["texto_wpp_unificado"] = ""
+
             with st.form("form_whatsapp"):
                 texto_wpp_unificado = st.text_area(
                     "Pega aquí la selección de WhatsApp (uno o varios contactos)", 
+                    value=st.session_state["texto_wpp_unificado"],
+                    key="input_wpp_area",
                     placeholder="Pega aquí el texto copiado de WhatsApp..."
                 )
                 
@@ -295,6 +301,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     btn_borrar_wpp = st.form_submit_button("🗑️ Borrar", use_container_width=True)
                 
                 if btn_borrar_wpp:
+                    st.session_state["texto_wpp_unificado"] = ""
+                    st.session_state["input_wpp_area"] = ""
+                    st.success("¡Texto borrado con éxito!")
                     st.rerun()
                 
                 if btn_wpp:
@@ -399,16 +408,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         conn.close()
 
                         if registros_exitosos > 0:
-                            st.success(f"¡Proceso en cascada completado! Se registraron {registros_exitosos} clientes verificando disponibilidad previa.")
+                            st.success(f"¡Proceso en cascada completado! Se procesaron {len(reporte_procesamiento)} líneas de chat.")
                             
-                            # Mostrar desglose y opciones para copiar cartones no disponibles o sugerir libres
-                            st.markdown("##### 📋 Reporte de Verificación Secuencial:")
-                            for rep in reporte_procesamiento:
-                                txt_asig = ", ".join(map(str, rep["asignados"])) if rep["asignados"] else "Ninguno"
-                                txt_no_disp = ", ".join(map(str, rep["no_disponibles"])) if rep["no_disponibles"] else "Ninguno (todos disponibles)"
-                                
-                                st.info(f"**👤 {rep['cliente']}** ➔ Asignados: [{txt_asig}] | ❌ No disponibles (ocupados previamente): [{txt_no_disp}]")
-                            
+                            # Guardar en session_state para mostrar las alertas con botones de copia interactivos
+                            st.session_state["reporte_wpp_activo"] = reporte_procesamiento
                             st.rerun()
                         else:
                             st.error("No se pudieron extraer datos válidos o cartones de los chats seleccionados.")
@@ -453,6 +456,76 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     conn.close()
                     st.warning("Base de datos limpia.")
                     st.rerun()
+
+    # Mostrar reporte de alertas y botones de copia rápida por cada cliente si existen resultados recientes
+    if "reporte_wpp_activo" in st.session_state and st.session_state["reporte_wpp_activo"]:
+        st.markdown("---")
+        st.markdown("#### 🚨 Alertas de Disponibilidad y Cartones Ocupados en esta Importación")
+        st.caption("Aquí tienes el detalle por cada contacto procesado. Si algún número ya estaba ocupado, puedes copiarlo con un clic para avisarle al cliente.")
+
+        for idx, rep in enumerate(st.session_state["reporte_wpp_activo"]):
+            cli_n = rep["cliente"]
+            asig_n = rep["asignados"]
+            no_disp = rep["no_disponibles"]
+
+            with st.container(border=True):
+                col_rep1, col_rep2 = st.columns([3, 1])
+                with col_rep1:
+                    st.write(f"**👤 Cliente:** {cli_n}")
+                    txt_asig = ", ".join(map(str, asig_n)) if asig_n else "Ninguno"
+                    st.caption(f"✅ **Cartones asignados y guardados:** {txt_asig}")
+                    
+                    if no_disp:
+                        txt_nodisp = ", ".join(map(str, no_disp))
+                        st.markdown(f"❌ <span style='color: #f87171; font-weight: bold;'>Cartones NO disponibles (ocupados): [{txt_nodisp}]</span>", unsafe_allow_html=True)
+                    else:
+                        st.markdown("✨ <span style='color: #4ade80;'>¡Todos los cartones solicitados estaban libres! Sin cruces.</span>", unsafe_allow_html=True)
+
+                with col_rep2:
+                    if no_disp:
+                        texto_a_copiar = f"Hola {cli_n}, los siguientes cartones ya no están disponibles: " + ", ".join(map(str, no_disp)) + ". ¿Deseas elegir otros?"
+                        texto_js = texto_a_copiar.replace('"', '\\"')
+                        
+                        btn_html_id = f"copiar_cli_{idx}"
+                        html_btn_cliente = f"""
+                        <div style="margin-top: 5px;">
+                            <button id="{btn_html_id}" onclick="copiarTexto_{idx}()" style="
+                                background-color: #dc2626;
+                                color: white;
+                                border: none;
+                                padding: 6px 10px;
+                                font-size: 12px;
+                                font-weight: bold;
+                                border-radius: 6px;
+                                cursor: pointer;
+                                width: 100%;
+                                text-align: center;
+                                font-family: sans-serif;
+                                box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+                            ">📋 Copiar No Disp.</button>
+                        </div>
+                        <script>
+                        async function copiarTexto_{idx}() {{
+                            try {{
+                                await navigator.clipboard.writeText("{texto_js}");
+                                const btn = document.getElementById("{btn_html_id}");
+                                btn.style.backgroundColor = '#16a34a';
+                                btn.innerText = '¡Copiado!';
+                                setTimeout(() => {{
+                                    btn.style.backgroundColor = '#dc2626';
+                                    btn.innerText = '📋 Copiar No Disp.';
+                                }}, 3000);
+                            }} catch (err) {{
+                                console.error(err);
+                            }}
+                        }}
+                        </script>
+                        """
+                        components.html(html_btn_cliente, height=50)
+
+        if st.button("🧹 Limpiar Alertas de Pantalla"):
+            del st.session_state["reporte_wpp_activo"]
+            st.rerun()
 
     st.divider()
 
