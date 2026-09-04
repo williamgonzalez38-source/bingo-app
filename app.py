@@ -301,25 +301,23 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # 1. Eliminar formato de hora y metadatos irrelevantes del texto crudo
-                        texto_limpio_global = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', texto_wpp_unificado, flags=re.IGNORECASE)
-                        texto_limpio_global = re.sub(r'\b(?:ayer|hoy)\b', '', texto_limpio_global, flags=re.IGNORECASE)
+                        # 1. Limpieza inicial de metadatos irrelevantes (horas, marcas temporales de WhatsApp)
+                        texto_limpio = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', texto_wpp_unificado, flags=re.IGNORECASE)
+                        texto_limpio = re.sub(r'\b(?:ayer|hoy)\b', '', texto_limpio, flags=re.IGNORECASE)
 
-                        # 2. Dividir el bloque en posibles fragmentos de contactos usando heurísticas de nombres en WhatsApp Web
-                        # Buscamos líneas que luzcan como nombres de contacto seguidas de contenido
-                        lineas_crudas = texto_limpio_global.split('\n')
+                        # 2. Dividir y agrupar inteligentemente por contacto individual independiente
+                        lineas_crudas = texto_limpio.split('\n')
                         lineas = [l.strip() for l in lineas_crudas if l.strip()]
 
-                        # Agrupación inteligente por bloques de contactos individuales
                         bloques_contactos = []
                         bloque_actual = []
 
                         for linea in lineas:
-                            # Detectar si una línea parece un nombre nuevo de contacto (ej: palabras en formato Título sin símbolos raros al inicio)
-                            is_nuevo_nombre = bool(re.match(r"^[A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?$", linea)) and linea.lower() not in ["buenas", "hola", "buenos", "tardes", "dias", "por", "favor", "gracias"]
+                            # Patrón para detectar nombres de contactos que encabezan un nuevo chat en la copia múltiple
+                            es_nombre_contacto = bool(re.match(r"^[A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)?$", linea)) and linea.lower() not in ["buenas", "hola", "buenos", "tardes", "dias", "por", "favor", "gracias", "activo", "pago"]
                             
-                            # Si detectamos un nombre y ya tenemos un bloque acumulado considerable, lo separamos como un nuevo contacto
-                            if is_nuevo_nombre and len(bloque_actual) >= 2:
+                            # Si detectamos un nuevo nombre y ya acumulamos datos del contacto anterior, separamos
+                            if es_nombre_contacto and len(bloque_actual) >= 2:
                                 bloques_contactos.append(bloque_actual)
                                 bloque_actual = [linea]
                             else:
@@ -332,7 +330,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
 
-                        for bloque in bloques_contactos:
+                        for idx_b, bloque in enumerate(bloques_contactos):
                             if not bloque:
                                 continue
                             
@@ -340,10 +338,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             cuerpo_bloque = " ".join(bloque[1:]) if len(bloque) > 1 else bloque[0]
 
                             if not nombre_cliente or nombre_cliente.lower() in ["buenas", "hola", "buenos", "tardes", "dias"]:
-                                nombre_cliente = "Cliente WhatsApp"
+                                nombre_cliente = f"Cliente WhatsApp #{idx_b + 1}"
                                 cuerpo_bloque = " ".join(bloque)
 
-                            # 3. Procesar cartones y peticiones al azar dentro del bloque de este contacto
+                            # 3. Analizar la acción específica de este contacto individual (azar vs números fijos)
                             texto_lower = cuerpo_bloque.lower()
                             pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme"])
                             
@@ -351,12 +349,13 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             nums_wpp = [str(n) for n in todos_numeros_cuerpo if 1 <= n <= 630]
 
                             cantidad_solicitada = 0
-                            if pide_azar or (len(todos_numeros_cuerpo) == 1 and todos_numeros_cuerpo[0] <= 100 and not any(n in cuerpo_bloque for n in ["carton", "cartones"] and todos_numeros_cuerpo[0] > 20)):
+                            if pide_azar or (len(todos_numeros_cuerpo) == 1 and todos_numeros_cuerpo[0] <= 100 and not any(k in cuerpo_bloque for k in ["carton", "cartones"] and todos_numeros_cuerpo[0] > 20)):
                                 for n_val in todos_numeros_cuerpo:
                                     if n_val <= 630:
                                         cantidad_solicitada = n_val
                                         break
 
+                            # Si pide al azar o una cantidad exacta sin especificar números concretos, se buscan disponibles reales
                             if (pide_azar and cantidad_solicitada > 0) or (len(nums_wpp) <= 1 and cantidad_solicitada > 1):
                                 c.execute("SELECT numeros FROM ventas")
                                 filas_actuales = c.fetchall()
@@ -373,6 +372,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     
                             if nums_wpp:
                                 nums_wpp = [n for n in nums_wpp if 1 <= int(n) <= 630]
+                                
+                                # Extraer la referencia de pago (6 dígitos) específica de este contacto
                                 ref_wpp_match = re.search(r"\b\d{6}\b", "".join(bloque))
                                 ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
@@ -386,7 +387,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         conn.close()
 
                         if registros_exitosos > 0:
-                            st.success(f"¡Se registraron exitosamente {registros_exitosos} contactos por separado!")
+                            st.success(f"¡Se procesaron y registraron {registros_exitosos} contactos por separado con sus respectivas acciones!")
                             st.rerun()
                         else:
                             st.error("No se pudieron extraer datos válidos o cartones de los chats seleccionados.")
