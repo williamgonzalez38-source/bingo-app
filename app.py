@@ -327,7 +327,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         st.warning("El campo de texto está vacío.")
                     else:
                         lineas = texto_wpp_unificado.split('\n')
-                        registros_exitosos = 0
                         
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
@@ -338,8 +337,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             for n in re.findall(r"\b\d+\b", f_nums):
                                 ocupados_en_memoria.add(int(n))
 
-                        # Lista unificada para guardar tanto los pendientes al azar como las advertencias de no disponibles en orden
-                        acciones_pendientes_unificadas = []
+                        # Lista que contendrá el análisis estructurado de cada cliente individualmente en orden exacto
+                        clientes_procesados_cola = []
 
                         for linea in lineas:
                             linea_s = linea.strip()
@@ -392,14 +391,15 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         break
 
                             if pide_azar and cantidad_solicitada > 0:
-                                # Agregar a la cola unificada en orden estricto de aparición
-                                acciones_pendientes_unificadas.append({
-                                    "tipo": "azar",
+                                # Tarjeta individual con solicitud al azar pendiente de aprobar
+                                clientes_procesados_cola.append({
+                                    "tipo": "pendiente_azar",
                                     "cliente": nombre_cliente,
                                     "cantidad": cantidad_solicitada,
                                     "ref": ref_wpp
                                 })
                             else:
+                                # Procesamiento directo de cartones específicos solicitados por este usuario
                                 cartones_asignados = []
                                 cartones_no_disponibles = []
 
@@ -432,26 +432,24 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
                                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, cartones_asignados)), len(cartones_asignados), estado_reg, ref_wpp))
-                                    
-                                    registros_exitosos += 1
 
-                                if cartones_no_disponibles:
-                                    # Agregar también las advertencias de no disponibles a la misma cola unificada ordenada
-                                    alert_txt = f"El cliente {nombre_cliente} solicitó cartones ya ocupados: " + ", ".join(map(str, cartones_no_disponibles))
-                                    acciones_pendientes_unificadas.append({
-                                        "tipo": "no_disponible",
+                                # Si se asignaron o hubo no disponibles, creamos su tarjeta individual con el estado correspondiente
+                                if cartones_asignados or cartones_no_disponibles:
+                                    clientes_procesados_cola.append({
+                                        "tipo": "asignado_o_aviso",
                                         "cliente": nombre_cliente,
-                                        "mensaje": alert_txt
+                                        "asignados": cartones_asignados,
+                                        "no_disponibles": cartones_no_disponibles,
+                                        "ref": ref_wpp
                                     })
 
                         conn.commit()
                         conn.close()
 
-                        if registros_exitosos > 0 or acciones_pendientes_unificadas:
+                        if clientes_procesados_cola:
                             st.session_state["wpp_version"] += 1
-                            if acciones_pendientes_unificadas:
-                                st.session_state["acciones_pendientes_wpp"] = acciones_pendientes_unificadas
-                            st.success("¡Importación procesada correctamente!")
+                            st.session_state["tarjetas_clientes_wpp"] = clientes_procesados_cola
+                            st.success("¡Importación analizada por cliente exitosamente!")
                             st.rerun()
                         else:
                             st.error("No se pudieron extraer datos válidos de los chats seleccionados.")
@@ -498,25 +496,25 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.rerun()
 
     # =========================================================================
-    # PANEL UNIFICADO Y LINEAL DE PENDIENTES Y ADVERTENCIAS DE LA IMPORTACIÓN
+    # TARJETAS INDIVIDUALES POR CLIENTE EN EL ORDEN EXACTO DE IMPORTACIÓN
     # =========================================================================
-    if "acciones_pendientes_wpp" in st.session_state and st.session_state["acciones_pendientes_wpp"]:
+    if "tarjetas_clientes_wpp" in st.session_state and st.session_state["tarjetas_clientes_wpp"]:
         st.markdown("---")
-        st.markdown("#### 📋 Acciones y Revisiones Pendientes de la Importación")
-        st.caption("Revisa en orden secuencial cada solicitud al azar o aviso de cartones ocupados.")
+        st.markdown("#### 👤 Resumen Individual por Cliente de la Importación")
+        st.caption("Cada tarjeta a continuación agrupa exactamente la situación de cada jugador en su respectivo orden.")
 
-        restantes_en_cola = []
-        for i, item_cola in enumerate(st.session_state["acciones_pendientes_wpp"]):
+        tarjetas_restantes = []
+        for i, tarjeta in enumerate(st.session_state["tarjetas_clientes_wpp"]):
             with st.container(border=True):
-                if item_cola["tipo"] == "azar":
-                    st.markdown(f"🎲 **Solicitud al Azar:** 👤 **{item_cola['cliente']}** pidió **{item_cola['cantidad']}** cartones.")
+                if tarjeta["tipo"] == "pendiente_azar":
+                    st.markdown(f"🎲 **Solicitud al Azar:** 👤 **{tarjeta['cliente']}** pidió **{tarjeta['cantidad']}** cartones al azar.")
                     
                     col_conf1, col_conf2, col_conf3 = st.columns([2, 1, 1])
                     with col_conf1:
                         cant_ajustada = st.number_input(
-                            f"Ajustar cantidad para {item_cola['cliente']}",
+                            f"Cantidad a asignar para {tarjeta['cliente']}",
                             min_value=1, max_value=630,
-                            value=int(item_cola['cantidad']),
+                            value=int(tarjeta['cantidad']),
                             key=f"input_azar_cant_{i}"
                         )
                     with col_conf2:
@@ -538,12 +536,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                         if len(disponibles_reales) < cant_ajustada:
                             st.error(f"No hay suficientes cartones libres. Solo quedan {len(disponibles_reales)} disponibles.")
-                            restantes_en_cola.append(item_cola)
+                            tarjetas_restantes.append(tarjeta)
                         else:
                             cartones_asignados = sorted(random.sample(disponibles_reales, cant_ajustada))
-                            ref_wpp = item_cola['ref']
+                            ref_wpp = tarjeta['ref']
 
-                            c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (item_cola['cliente'],))
+                            c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (tarjeta['cliente'],))
                             cliente_db_existente = c.fetchone()
 
                             if cliente_db_existente:
@@ -560,31 +558,72 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             else:
                                 estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                                 c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                          (datetime.now().strftime("%Y-%m-%d %H:%M"), item_cola['cliente'], ", ".join(map(str, cartones_asignados)), cant_ajustada, estado_reg, ref_wpp))
+                                          (datetime.now().strftime("%Y-%m-%d %H:%M"), tarjeta['cliente'], ", ".join(map(str, cartones_asignados)), cant_ajustada, estado_reg, ref_wpp))
 
                             conn.commit()
                             conn.close()
-                            st.success(f"¡Se asignaron exitosamente {cant_ajustada} cartones a {item_cola['cliente']}!")
+                            st.success(f"¡Se asignaron exitosamente {cant_ajustada} cartones a {tarjeta['cliente']}!")
                             st.rerun()
 
                     elif btn_rechazar:
-                        st.info(f"Solicitud de {item_cola['cliente']} descartada.")
+                        st.info(f"Solicitud al azar de {tarjeta['cliente']} descartada.")
                     else:
-                        restantes_en_cola.append(item_cola)
+                        tarjetas_restantes.append(tarjeta)
 
-                elif item_cola["tipo"] == "no_disponible":
-                    st.markdown(f"⚠️ **Aviso de Cartones Ocupados:**")
-                    st.warning(item_cola["mensaje"])
+                elif tarjeta["tipo"] == "asignado_o_aviso":
+                    st.markdown(f"👤 **Cliente:** {tarjeta['cliente']}")
                     
-                    if not st.button("🗑️ Descartar este aviso", key=f"btn_desc_aviso_{i}"):
-                        restantes_en_cola.append(item_cola)
+                    if tarjeta["asignados"]:
+                        st.success(f"✅ Cartones asignados correctamente: " + ", ".join(map(str, tarjeta["asignados"])))
+                    
+                    if tarjeta["no_disponibles"]:
+                        texto_aviso = f"⚠️ Los siguientes cartones solicitados ya no estaban disponibles: " + ", ".join(map(str, tarjeta["no_disponibles"]))
+                        st.warning(texto_aviso)
+                        
+                        # Botón dinámico para copiar individualmente la alerta de este cliente
+                        texto_copiar_cliente = f"Hola {tarjeta['cliente']}, los cartones " + ", ".join(map(str, tarjeta["no_disponibles"])) + " ya no están disponibles. ¿Deseas elegir otros?"
+                        
+                        btn_id_c = f"btn_copiar_cli_{i}"
+                        div_id_c = f"div_cli_{i}"
+                        
+                        html_btn_cliente = f"""
+                        <div id="{div_id_c}" style="margin-top: 6px;">
+                            <button id="{btn_id_c}" onclick="copiarCliente_{i}()" style="
+                                background-color: #2563eb;
+                                color: white;
+                                border: none;
+                                padding: 5px 10px;
+                                font-size: 11px;
+                                font-weight: bold;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-family: sans-serif;
+                            ">📋 Copiar aviso para este cliente</button>
+                        </div>
+                        <script>
+                        async function copiarCliente_{i}() {{
+                            try {{
+                                await navigator.clipboard.writeText("{texto_copiar_cliente.replace('"', '\\"')}");
+                                const btn = document.getElementById("{btn_id_c}");
+                                btn.style.backgroundColor = '#16a34a';
+                                btn.innerText = '¡Copiado al portapapeles!';
+                            }} catch (err) {{
+                                console.error(err);
+                            }}
+                        }}
+                        </script>
+                        """
+                        components.html(html_btn_cliente, height=40)
+
+                    if not st.button("🗑️ Cerrar esta tarjeta", key=f"cerrar_tarjeta_{i}"):
+                        tarjetas_restantes.append(tarjeta)
                     else:
                         st.rerun()
 
-        if len(restantes_en_cola) != len(st.session_state["acciones_pendientes_wpp"]):
-            st.session_state["acciones_pendientes_wpp"] = restantes_en_cola
-            if not restantes_en_cola:
-                del st.session_state["acciones_pendientes_wpp"]
+        if len(tarjetas_restantes) != len(st.session_state["tarjetas_clientes_wpp"]):
+            st.session_state["tarjetas_clientes_wpp"] = tarjetas_restantes
+            if not tarjetas_restantes:
+                del st.session_state["tarjetas_clientes_wpp"]
             st.rerun()
 
     st.divider()
