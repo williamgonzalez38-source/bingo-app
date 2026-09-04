@@ -133,10 +133,8 @@ def generar_imagen_base64(libres):
         text = str(n)
         
         if n in libres:
-            # Disponibles: Color negro puro y nítido
             draw.text((x, y), text, fill="#000000", font=font_grid)
         else:
-            # No disponibles: Tono gris mucho más claro y translúcido (#e2e8f0)
             draw.text((x, y), text, fill="#e2e8f0", font=font_grid)
         
     buf = io.BytesIO()
@@ -340,8 +338,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             for n in re.findall(r"\b\d+\b", f_nums):
                                 ocupados_en_memoria.add(int(n))
 
-                        alertas_importacion = []
-                        pendientes_azar_temporal = []
+                        # Lista unificada para guardar tanto los pendientes al azar como las advertencias de no disponibles en orden
+                        acciones_pendientes_unificadas = []
 
                         for linea in lineas:
                             linea_s = linea.strip()
@@ -367,7 +365,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             ref_wpp_match = re.search(r"\b\d{6}\b", cuerpo_mensaje)
                             ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
-                            # Verificar si pide al azar explícitamente antes de la palabra clave
                             texto_lower = cuerpo_mensaje.lower()
                             palabras_clave_azar = ["azar", "aleatorio"]
                             
@@ -394,16 +391,15 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         cantidad_solicitada = n_val
                                         break
 
-                            # SI PIDE AL AZAR, LO MANDAMOS A PENDIENTE DE APROBACIÓN MANUAL
                             if pide_azar and cantidad_solicitada > 0:
-                                pend_item = {
+                                # Agregar a la cola unificada en orden estricto de aparición
+                                acciones_pendientes_unificadas.append({
+                                    "tipo": "azar",
                                     "cliente": nombre_cliente,
                                     "cantidad": cantidad_solicitada,
                                     "ref": ref_wpp
-                                }
-                                pendientes_azar_temporal.append(pend_item)
+                                })
                             else:
-                                # Procesamiento normal de números específicos
                                 cartones_asignados = []
                                 cartones_no_disponibles = []
 
@@ -440,18 +436,21 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     registros_exitosos += 1
 
                                 if cartones_no_disponibles:
-                                    alert_txt = f"Hola {nombre_cliente}, los siguientes cartones ya no están disponibles: " + ", ".join(map(str, cartones_no_disponibles)) + ". ¿Deseas elegir otros?"
-                                    alertas_importacion.append(alert_txt)
+                                    # Agregar también las advertencias de no disponibles a la misma cola unificada ordenada
+                                    alert_txt = f"El cliente {nombre_cliente} solicitó cartones ya ocupados: " + ", ".join(map(str, cartones_no_disponibles))
+                                    acciones_pendientes_unificadas.append({
+                                        "tipo": "no_disponible",
+                                        "cliente": nombre_cliente,
+                                        "mensaje": alert_txt
+                                    })
 
                         conn.commit()
                         conn.close()
 
-                        if registros_exitosos > 0 or pendientes_azar_temporal:
+                        if registros_exitosos > 0 or acciones_pendientes_unificadas:
                             st.session_state["wpp_version"] += 1
-                            if alertas_importacion:
-                                st.session_state["alertas_wpp_activas"] = alertas_importacion
-                            if pendientes_azar_temporal:
-                                st.session_state["pendientes_azar"] = pendientes_azar_temporal
+                            if acciones_pendientes_unificadas:
+                                st.session_state["acciones_pendientes_wpp"] = acciones_pendientes_unificadas
                             st.success("¡Importación procesada correctamente!")
                             st.rerun()
                         else:
@@ -498,134 +497,94 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.warning("Base de datos limpia.")
                     st.rerun()
 
-    # ==========================================
-    # SECCIÓN DE APROBACIÓN MANUAL PARA SOLICITUDES AL AZAR
-    # ==========================================
-    if "pendientes_azar" in st.session_state and st.session_state["pendientes_azar"]:
+    # =========================================================================
+    # PANEL UNIFICADO Y LINEAL DE PENDIENTES Y ADVERTENCIAS DE LA IMPORTACIÓN
+    # =========================================================================
+    if "acciones_pendientes_wpp" in st.session_state and st.session_state["acciones_pendientes_wpp"]:
         st.markdown("---")
-        st.markdown("#### ⚠️ Solicitudes al Azar Pendientes de Aprobación")
-        st.caption("Revisa la cantidad solicitada, ajústala si es necesario y aprueba para asignarlos.")
+        st.markdown("#### 📋 Acciones y Revisiones Pendientes de la Importación")
+        st.caption("Revisa en orden secuencial cada solicitud al azar o aviso de cartones ocupados.")
 
-        pendientes_a_mantener = []
-        for i, item_azar in enumerate(st.session_state["pendientes_azar"]):
+        restantes_en_cola = []
+        for i, item_cola in enumerate(st.session_state["acciones_pendientes_wpp"]):
             with st.container(border=True):
-                st.write(f"👤 **Cliente:** {item_azar['cliente']}")
-                
-                col_conf1, col_conf2, col_conf3 = st.columns([2, 1, 1])
-                with col_conf1:
-                    cant_ajustada = st.number_input(
-                        f"Cantidad de cartones para {item_azar['cliente']}",
-                        min_value=1, max_value=630,
-                        value=int(item_azar['cantidad']),
-                        key=f"input_azar_cant_{i}"
-                    )
-                with col_conf2:
-                    btn_aprobar = st.button("✅ Sí, Asignar", key=f"btn_aprob_{i}", use_container_width=True)
-                with col_conf3:
-                    btn_rechazar = st.button("❌ Rechazar", key=f"btn_rech_{i}", use_container_width=True)
+                if item_cola["tipo"] == "azar":
+                    st.markdown(f"🎲 **Solicitud al Azar:** 👤 **{item_cola['cliente']}** pidió **{item_cola['cantidad']}** cartones.")
+                    
+                    col_conf1, col_conf2, col_conf3 = st.columns([2, 1, 1])
+                    with col_conf1:
+                        cant_ajustada = st.number_input(
+                            f"Ajustar cantidad para {item_cola['cliente']}",
+                            min_value=1, max_value=630,
+                            value=int(item_cola['cantidad']),
+                            key=f"input_azar_cant_{i}"
+                        )
+                    with col_conf2:
+                        btn_aprobar = st.button("✅ Sí, Asignar", key=f"btn_aprob_{i}", use_container_width=True)
+                    with col_conf3:
+                        btn_rechazar = st.button("❌ Rechazar", key=f"btn_rech_{i}", use_container_width=True)
 
-                if btn_aprobar:
-                    # Conectar y buscar ocupados actuales
-                    conn = sqlite3.connect(DB_NAME)
-                    c = conn.cursor()
-                    c.execute("SELECT numeros FROM ventas")
-                    filas_actuales = c.fetchall()
-                    ocupados_en_memoria = set()
-                    for f_nums, in filas_actuales:
-                        for n in re.findall(r"\b\d+\b", f_nums):
-                            ocupados_en_memoria.add(int(n))
+                    if btn_aprobar:
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("SELECT numeros FROM ventas")
+                        filas_actuales = c.fetchall()
+                        ocupados_en_memoria = set()
+                        for f_nums, in filas_actuales:
+                            for n in re.findall(r"\b\d+\b", f_nums):
+                                ocupados_en_memoria.add(int(n))
 
-                    disponibles_reales = [n for n in range(1, 631) if n not in ocupados_en_memoria]
+                        disponibles_reales = [n for n in range(1, 631) if n not in ocupados_en_memoria]
 
-                    if len(disponibles_reales) < cant_ajustada:
-                        st.error(f"No hay suficientes cartones libres. Solo quedan {len(disponibles_reales)} disponibles.")
-                        pendientes_a_mantener.append(item_azar)
-                    else:
-                        cartones_asignados = sorted(random.sample(disponibles_reales, cant_ajustada))
-                        ref_wpp = item_azar['ref']
-
-                        c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (item_azar['cliente'],))
-                        cliente_db_existente = c.fetchone()
-
-                        if cliente_db_existente:
-                            id_db, nums_db_str, ref_db = cliente_db_existente
-                            nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", nums_db_str)]
-                            cartones_combinados = sorted(list(set(nums_db_lista + cartones_asignados)))
-                            nums_combinados_str = ", ".join(map(str, cartones_combinados))
-                            
-                            ref_final = ref_db if ref_db else ref_wpp
-                            estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
-                            
-                            c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                      (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_db))
+                        if len(disponibles_reales) < cant_ajustada:
+                            st.error(f"No hay suficientes cartones libres. Solo quedan {len(disponibles_reales)} disponibles.")
+                            restantes_en_cola.append(item_cola)
                         else:
-                            estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
-                            c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                      (datetime.now().strftime("%Y-%m-%d %H:%M"), item_azar['cliente'], ", ".join(map(str, cartones_asignados)), cant_ajustada, estado_reg, ref_wpp))
+                            cartones_asignados = sorted(random.sample(disponibles_reales, cant_ajustada))
+                            ref_wpp = item_cola['ref']
 
-                        conn.commit()
-                        conn.close()
-                        st.success(f"¡Se asignaron exitosamente {cant_ajustada} cartones a {item_azar['cliente']}!")
+                            c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (item_cola['cliente'],))
+                            cliente_db_existente = c.fetchone()
+
+                            if cliente_db_existente:
+                                id_db, nums_db_str, ref_db = cliente_db_existente
+                                nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", nums_db_str)]
+                                cartones_combinados = sorted(list(set(nums_db_lista + cartones_asignados)))
+                                nums_combinados_str = ", ".join(map(str, cartones_combinados))
+                                
+                                ref_final = ref_db if ref_db else ref_wpp
+                                estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
+                                
+                                c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
+                                          (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_db))
+                            else:
+                                estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
+                                c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                          (datetime.now().strftime("%Y-%m-%d %H:%M"), item_cola['cliente'], ", ".join(map(str, cartones_asignados)), cant_ajustada, estado_reg, ref_wpp))
+
+                            conn.commit()
+                            conn.close()
+                            st.success(f"¡Se asignaron exitosamente {cant_ajustada} cartones a {item_cola['cliente']}!")
+                            st.rerun()
+
+                    elif btn_rechazar:
+                        st.info(f"Solicitud de {item_cola['cliente']} descartada.")
+                    else:
+                        restantes_en_cola.append(item_cola)
+
+                elif item_cola["tipo"] == "no_disponible":
+                    st.markdown(f"⚠️ **Aviso de Cartones Ocupados:**")
+                    st.warning(item_cola["mensaje"])
+                    
+                    if not st.button("🗑️ Descartar este aviso", key=f"btn_desc_aviso_{i}"):
+                        restantes_en_cola.append(item_cola)
+                    else:
                         st.rerun()
 
-                elif btn_rechazar:
-                    st.info(f"Solicitud de {item_azar['cliente']} rechazada.")
-                else:
-                    pendientes_a_mantener.append(item_azar)
-
-        if len(pendientes_a_mantener) != len(st.session_state["pendientes_azar"]):
-            st.session_state["pendientes_azar"] = pendientes_a_mantener
-            if not pendientes_a_mantener:
-                del st.session_state["pendientes_azar"]
-            st.rerun()
-
-    if "alertas_wpp_activas" in st.session_state and st.session_state["alertas_wpp_activas"]:
-        st.markdown("---")
-        st.markdown("#### 🚨 Cartones No Disponibles en la última importación")
-        st.caption("Copia el aviso para enviarlo al cliente por WhatsApp. Al hacerlo, la alerta desaparecerá de aquí.")
-
-        for idx, texto_alerta in enumerate(st.session_state["alertas_wpp_activas"]):
-            texto_js = texto_alerta.replace('"', '\\"')
-            btn_id = f"alerta_btn_{idx}"
-            div_id = f"alerta_div_{idx}"
-
-            html_alerta_dinamica = f"""
-            <div id="{div_id}" style="background-color: #1e293b; border-left: 4px solid #dc2626; padding: 12px; border-radius: 6px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; font-family: sans-serif;">
-                <span style="color: #f8fafc; font-size: 13px; padding-right: 10px;">{texto_alerta}</span>
-                <button id="{btn_id}" onclick="copiarYBorrar_{idx}()" style="
-                    background-color: #dc2626;
-                    color: white;
-                    border: none;
-                    padding: 6px 12px;
-                    font-size: 12px;
-                    font-weight: bold;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    white-space: nowrap;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-                ">📋 Copiar y Borrar</button>
-            </div>
-            <script>
-            async function copiarYBorrar_{idx}() {{
-                try {{
-                    await navigator.clipboard.writeText("{texto_js}");
-                    const btn = document.getElementById("{btn_id}");
-                    const caja = document.getElementById("{div_id}");
-                    btn.style.backgroundColor = '#16a34a';
-                    btn.innerText = '¡Copiado!';
-                    setTimeout(() => {{
-                        caja.style.display = 'none';
-                    }}, 800);
-                }} catch (err) {{
-                    console.error(err);
-                }}
-            }}
-            </script>
-            """
-            components.html(html_alerta_dinamica, height=65)
-
-        if st.button("🧹 Limpiar Todas las Alertas"):
-            del st.session_state["alertas_wpp_activas"]
+        if len(restantes_en_cola) != len(st.session_state["acciones_pendientes_wpp"]):
+            st.session_state["acciones_pendientes_wpp"] = restantes_en_cola
+            if not restantes_en_cola:
+                del st.session_state["acciones_pendientes_wpp"]
             st.rerun()
 
     st.divider()
