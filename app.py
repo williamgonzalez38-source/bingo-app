@@ -368,10 +368,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                             # ==========================================
                             # RESTRICCIÓN GRAMATICAL ESTRICTA:
-                            # Solo tomar números que estén ANTES de la palabra clave de azar
+                            # Reconocer "azar" o "aleatorio" explícitamente antes de esa palabra.
                             # ==========================================
                             texto_lower = cuerpo_mensaje.lower()
-                            palabras_clave_azar = ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme", "necesito"]
+                            palabras_clave_azar = ["azar", "aleatorio"]
                             
                             cuerpo_a_analizar = cuerpo_mensaje
                             pide_azar = False
@@ -394,13 +394,14 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             cartones_no_disponibles = []
 
                             cantidad_solicitada = 0
-                            if pide_azar or (len(candidatos_num) == 1 and candidatos_num[0] <= 100):
+                            # Solo aplica asignación al azar si la persona escribió explícitamente "azar" o "aleatorio"
+                            if pide_azar and len(candidatos_num) > 0:
                                 for n_val in candidatos_num:
                                     if n_val <= 630:
                                         cantidad_solicitada = n_val
                                         break
 
-                            if (pide_azar and cantidad_solicitada > 0) or (len(candidatos_num) <= 1 and cantidad_solicitada > 1):
+                            if pide_azar and cantidad_solicitada > 0:
                                 disponibles_reales = [n for n in range(1, 631) if n not in ocupados_en_memoria]
                                 if len(disponibles_reales) >= cantidad_solicitada:
                                     cartones_asignados = sorted(random.sample(disponibles_reales, cantidad_solicitada))
@@ -592,8 +593,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             else:
                                 conn = sqlite3.connect(DB_NAME)
                                 c = conn.cursor()
-                                c.execute("UPDATE ventas SET cliente=?, numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                          (nuevo_cliente.strip(), ", ".join(nums_val_edit), len(nums_val_edit), nuevo_estado, nueva_ref.strip(), id_r))
+                                c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=?, cliente=? WHERE id=?",
+                                          (", ".join(nums_val_edit), len(nums_val_edit), nuevo_estado, nueva_ref.strip(), nuevo_cliente.strip(), id_r))
                                 conn.commit()
                                 conn.close()
                                 st.rerun()
