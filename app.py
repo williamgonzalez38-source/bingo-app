@@ -252,12 +252,13 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             with col_f2:
                 nums_input = st.text_input("Cartones (Ej: 12, 45, 100)")
             with col_f3:
-                ref_input = st.text_input("Referencia (6 dígitos)", max_chars=6)
+                ref_input = st.text_input("Últimos 6 dígitos", max_chars=6)
             
             submitted = st.form_submit_button("Guardar Registro")
             
             if submitted:
                 nums_val = [int(n) for n in re.findall(r"\b\d+\b", nums_input) if 1 <= int(n) <= 630]
+                ref_limpia = ref_input.strip()[-6:] if ref_input.strip() else ""
                 if not cli_input.strip():
                     st.error("Debe indicar el nombre del cliente.")
                 elif not nums_val:
@@ -278,16 +279,16 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             "cliente": cli_input.strip(),
                             "nuevos_asignados": [n for n in nums_val if n not in cartones_ocupados],
                             "nuevos_no_disponibles": [n for n in nums_val if n in cartones_ocupados],
-                            "ref": ref_input.strip()
+                            "ref": ref_limpia
                         })
                         st.warning(f"⚠️ El cliente '{cli_input.strip()}' ya existe. Se ha registrado la alerta en su tarjeta abajo.")
                     else:
-                        estado_reg = "Cancelado" if ref_input.strip() else "Pendiente por Cancelar"
+                        estado_reg = "Cancelado" if ref_limpia else "Pendiente por Cancelar"
                         nums_str = ", ".join(map(str, sorted(set(nums_val))))
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), nums_str, len(set(nums_val)), estado_reg, ref_input.strip()))
+                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), nums_str, len(set(nums_val)), estado_reg, ref_limpia))
                         conn.commit()
                         conn.close()
                         st.success("¡Cliente registrado con éxito!")
@@ -309,7 +310,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                 texto_wpp_unificado = st.text_area(
                     "Pega aquí la selección de WhatsApp (uno o varios contactos)", 
                     key=key_text_area,
-                    placeholder="Pega aquí el texto copiado de WhatsApp..."
+                    placeholder="Pega hier el texto copiado de WhatsApp..."
                 )
                 
                 col_btn_w1, col_btn_w2 = st.columns(2)
@@ -360,8 +361,14 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     nombre_cliente = "Cliente WhatsApp"
                                     cuerpo_mensaje = linea_s
 
-                            ref_wpp_match = re.search(r"\b\d{6}\b", cuerpo_mensaje)
-                            ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
+                            ref_wpp_match = re.search(r"\b\d{6,}\b", cuerpo_mensaje)
+                            if not ref_wpp_match:
+                                ref_wpp_match = re.search(r"\b\d{4,6}\b", cuerpo_mensaje)
+                            
+                            ref_wpp = ""
+                            if ref_wpp_match:
+                                ref_completa = ref_wpp_match.group(0)
+                                ref_wpp = ref_completa[-6:]
 
                             texto_lower = cuerpo_mensaje.lower()
                             
@@ -371,7 +378,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
                             candidatos_num = [n for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3]
                             
-                            if ref_wpp:
+                            if ref_wpp and int(ref_wpp) in candidatos_num:
                                 candidatos_num = [n for n in candidatos_num if str(n) != ref_wpp]
 
                             cantidad_azar_solicitada = 0
@@ -674,17 +681,19 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     st.rerun()
 
             with c_ref_input:
-                # Cuadrito compacto superior derecho para colocar/actualizar referencia de pago con 6 dígitos y autoguardado fluido
-                st.markdown("<p style='font-size: 11px; color: #94a3b8; margin-bottom: -2px;'>💳 Referencia Pago (6 dígitos):</p>", unsafe_allow_html=True)
+                # Cuadrito compacto superior derecho para colocar/actualizar referencia de pago extrayendo o limitando a los últimos 6 dígitos
+                st.markdown("<p style='font-size: 11px; color: #94a3b8; margin-bottom: -2px;'>💳 Últenimos 6 dígitos:</p>", unsafe_allow_html=True)
                 key_ref_input = f"ref_rapida_{id_r}"
                 nueva_ref_input = st.text_input("Ref rápida", value=referencia, max_chars=6, label_visibility="collapsed", key=key_ref_input)
                 
-                # Si cambia la referencia inline, se actualiza automáticamente el estado y la BD sin estorbar
-                if nueva_ref_input != referencia:
-                    nuevo_estado_reg = "Cancelado" if nueva_ref_input.strip() else "Pendiente por Cancelar"
+                # Procesar y aislar siempre los últimos 6 dígitos de lo ingresado de forma fluida
+                ref_limpia_inline = nueva_ref_input.strip()[-6:] if nueva_ref_input.strip() else ""
+                
+                if ref_limpia_inline != referencia:
+                    nuevo_estado_reg = "Cancelado" if ref_limpia_inline else "Pendiente por Cancelar"
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    c.execute("UPDATE ventas SET referencia=?, estado=? WHERE id=?", (nueva_ref_input.strip(), nuevo_estado_reg, id_r))
+                    c.execute("UPDATE ventas SET referencia=?, estado=? WHERE id=?", (ref_limpia_inline, nuevo_estado_reg, id_r))
                     conn.commit()
                     conn.close()
                     st.rerun()
@@ -698,11 +707,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         with st.form(key=f"form_edit_{id_r}"):
                             nuevos_nums = st.text_input("🔢 Números", value=numeros)
                             nuevo_cliente = st.text_input("👤 Cliente", value=cliente)
-                            nueva_ref_avanzada = st.text_input("Ref", value=referencia, max_chars=6)
+                            nueva_ref_avanzada = st.text_input("Últimos 6 dígitos", value=referencia, max_chars=6)
                             nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
                             
                             if st.form_submit_button("Actualizar", use_container_width=True):
                                 nums_val_edit = [int(n) for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
+                                ref_avanzada_limpia = nueva_ref_avanzada.strip()[-6:] if nueva_ref_avanzada.strip() else ""
                                 if not nuevo_cliente.strip():
                                     st.error("Vacío.")
                                 elif not nums_val_edit:
@@ -711,7 +721,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     conn = sqlite3.connect(DB_NAME)
                                     c = conn.cursor()
                                     c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=?, cliente=? WHERE id=?",
-                                              (", ".join(map(str, sorted(set(nums_val_edit)))), len(set(nums_val_edit)), nuevo_estado, nueva_ref_avanzada.strip(), nuevo_cliente.strip(), id_r))
+                                              (", ".join(map(str, sorted(set(nums_val_edit)))), len(set(nums_val_edit)), nuevo_estado, ref_avanzada_limpia, nuevo_cliente.strip(), id_r))
                                     conn.commit()
                                     conn.close()
                                     st.rerun()
