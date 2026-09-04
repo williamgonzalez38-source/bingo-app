@@ -340,7 +340,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             for n in re.findall(r"\b\d+\b", f_nums):
                                 ocupados_en_memoria.add(int(n))
 
-                        # Lista para alertas integradas en la misma sesión
                         alertas_importacion = []
 
                         for linea in lineas:
@@ -364,20 +363,36 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     nombre_cliente = "Cliente WhatsApp"
                                     cuerpo_mensaje = linea_s
 
-                            todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
                             ref_wpp_match = re.search(r"\b\d{6}\b", cuerpo_mensaje)
                             ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
+                            # ==========================================
+                            # RESTRICCIÓN GRAMATICAL ESTRICTA:
+                            # Solo tomar números que estén ANTES de la palabra clave de azar
+                            # ==========================================
+                            texto_lower = cuerpo_mensaje.lower()
+                            palabras_clave_azar = ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme", "necesito"]
+                            
+                            cuerpo_a_analizar = cuerpo_mensaje
+                            pide_azar = False
+                            
+                            for palabra in palabras_clave_azar:
+                                if palabra in texto_lower:
+                                    pide_azar = True
+                                    # Cortar el texto exactamente donde aparece la palabra clave para omitir lo que venga después
+                                    idx_palabra = texto_lower.find(palabra)
+                                    cuerpo_a_analizar = cuerpo_mensaje[:idx_palabra]
+                                    break
+
+                            todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_a_analizar)]
                             candidatos_num = [n for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3]
+                            
                             if ref_wpp:
                                 candidatos_num = [n for n in candidatos_num if str(n) != ref_wpp]
 
                             cartones_asignados = []
                             cartones_no_disponibles = []
 
-                            texto_lower = cuerpo_mensaje.lower()
-                            pide_azar = any(w in texto_lower for w in ["azar", "aleatorio", "cualquiera", "dame", "regalame", "mandame", "asigname", "ponme", "necesito"])
-                            
                             cantidad_solicitada = 0
                             if pide_azar or (len(candidatos_num) == 1 and candidatos_num[0] <= 100):
                                 for n_val in candidatos_num:
@@ -396,7 +411,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     else:
                                         cartones_no_disponibles.append(num_req)
 
-                            # Guardar e unificar directamente en la BD principal
                             if cartones_asignados:
                                 for n in cartones_asignados:
                                     ocupados_en_memoria.add(n)
@@ -479,13 +493,11 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.warning("Base de datos limpia.")
                     st.rerun()
 
-    # Panel de Alertas Integradas: Al hacer clic en copiar, el aviso se borra automáticamente de la pantalla
     if "alertas_wpp_activas" in st.session_state and st.session_state["alertas_wpp_activas"]:
         st.markdown("---")
         st.markdown("#### 🚨 Cartones No Disponibles en la última importación")
         st.caption("Copia el aviso para enviarlo al cliente por WhatsApp. Al hacerlo, la alerta desaparecerá de aquí.")
 
-        alertas_a_mantener = []
         for idx, texto_alerta in enumerate(st.session_state["alertas_wpp_activas"]):
             texto_js = texto_alerta.replace('"', '\\"')
             btn_id = f"alerta_btn_{idx}"
