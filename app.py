@@ -276,6 +276,13 @@ elif menu_seleccionado == "🗃️ Historial Definitivo":
         st.divider()
         st.markdown(f"##### 💎 **Total General Histórico Recaudado: Bs. {total_acumulado_historial:,.2f}**")
 
+elif menu_seleccionado == "🎟️ Matriz (1-630)":
+    st.markdown("#### 🎟️ Matriz Visual de Cartones (1 al 630)")
+    st.caption("Los números en color claro o atenuado ya se encuentran ocupados por algún jugador.")
+    libres_grid = [n for n in range(1, 631) if n not in cartones_ocupados]
+    img_b64_full = generar_imagen_base64(libres_grid)
+    st.markdown(f'<div style="text-align: center;"><img src="data:image/png;base64,{img_b64_full}" style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);"></div>', unsafe_allow_html=True)
+
 elif menu_seleccionado == "📋 Ventas y Registro":
     with st.expander("➕ Opciones de Registro Rápido", expanded=True):
         
@@ -607,8 +614,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     conn.commit()
                                     conn.close()
                                     
+                                    # Limpiar completamente la sección de nuevos asignados o remover la notificación si ya no hay nada pendiente
                                     notif_asociada['nuevos_asignados'] = []
-                                    if not notif_asociada.get('nuevos_no_disponibles') and notif_asociada in st.session_state["pendientes_pendientes_wpp"]:
+                                    if not notif_asociada.get('nuevos_no_disponibles'):
                                         st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                     st.rerun()
 
@@ -620,7 +628,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             with cols_o2:
                                 if st.button("❌ Borrar Notif.", key=f"cerrar_dup_{id_r}_{random.randint(100,999)}", use_container_width=True):
                                     notif_asociada['nuevos_no_disponibles'] = []
-                                    if not notif_asociada.get('nuevos_asignados') and notif_asociada in st.session_state["pendientes_pendientes_wpp"]:
+                                    if not notif_asociada.get('nuevos_asignados'):
                                         st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                     st.rerun()
 
@@ -650,207 +658,44 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 for f_nums, in filas_actuales:
                                     for n in re.findall(r"\b\d+\b", f_nums):
                                         ocupados_en_memoria.add(int(n))
-                                disponibles_reales = [n for n in range(1, 631) if n not in ocupados_en_memoria]
-
-                                if len(disponibles_reales) < notif_asociada['cantidad']:
-                                    st.error("No hay suficientes cartones.")
+                                disponibles = [n for n in range(1, 631) if n not in ocupados_en_memoria]
+                                if len(disponibles) < notif_asociada['cantidad']:
+                                    st.error("No hay suficientes cartones libres.")
+                                    conn.close()
                                 else:
-                                    cartones_asignados = sorted(random.sample(disponibles_reales, notif_asociada['cantidad']))
+                                    seleccionados = sorted(random.sample(disponibles, notif_asociada['cantidad']))
                                     nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
-                                    cartones_combinados = sorted(list(set(nums_db_lista + cartones_asignados)))
+                                    cartones_combinados = sorted(list(set(nums_db_lista + seleccionados)))
                                     nums_combinados_str = ", ".join(map(str, cartones_combinados))
                                     ref_final = referencia if referencia else notif_asociada['ref']
                                     estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
-
-                                    c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                              (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_r))
-                                    conn.commit()
-                                    conn.close()
-
-                                    st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
-                                    st.rerun()
-
-                    elif tipo_n == "pendiente_azar_condicional":
-                        cols_con1, cols_con2 = st.columns([2, 1])
-                        with cols_con1:
-                            texto_ocupados = ", ".join(map(str, notif_asociada['ocupados']))
-                            st.markdown(f"🚫 **No disponible:** `{texto_ocupados}`")
-                        with cols_con2:
-                            if st.button("🎲 Reemplazar", key=f"btn_cond_{id_r}", use_container_width=True):
-                                conn = sqlite3.connect(DB_NAME)
-                                c = conn.cursor()
-                                c.execute("SELECT numeros FROM ventas")
-                                filas_actuales = c.fetchall()
-                                ocupados_en_memoria = set()
-                                for f_nums, in filas_actuales:
-                                    for n in re.findall(r"\b\d+\b", f_nums):
-                                        ocupados_en_memoria.add(int(n))
-
-                                cartones_finales_aprobados = list(notif_asociada['libres'])
-                                faltantes_cantidad = len(notif_asociada['ocupados'])
-                                disponibles_reales = [n for n in range(1, 631) if n not in ocupados_en_memoria and n not in cartones_finales_aprobados]
-
-                                if len(disponibles_reales) < faltantes_cantidad:
-                                    st.error("No hay suficientes cartones.")
-                                else:
-                                    reemplazos_azar = sorted(random.sample(disponibles_reales, faltantes_cantidad))
-                                    cartones_finales_aprobados = sorted(cartones_finales_aprobados + reemplazos_azar)
                                     
-                                    nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
-                                    cartones_combinados = sorted(list(set(nums_db_lista + cartones_finales_aprobados)))
-                                    nums_combinados_str = ", ".join(map(str, cartones_combinados))
-                                    ref_final = referencia if referencia else notif_asociada['ref']
-                                    estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
-
                                     c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
                                               (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_r))
                                     conn.commit()
                                     conn.close()
-
-                                    st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
+                                    
+                                    if notif_asociada in st.session_state["pendientes_pendientes_wpp"]:
+                                        st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                     st.rerun()
-
+            
             with c_ref_input:
-                st.markdown("<p style='font-size: 11px; color: #94a3b8; margin-bottom: -2px;'>💳 Últenimos 6 dígitos:</p>", unsafe_allow_html=True)
-                key_ref_input = f"ref_rapida_{id_r}"
-                nueva_ref_input = st.text_input("Ref rápida", value=referencia, max_chars=6, label_visibility="collapsed", key=key_ref_input)
-                
-                ref_limpia_inline = nueva_ref_input.strip()[-6:] if nueva_ref_input.strip() else ""
-                
-                if ref_limpia_inline != referencia:
-                    nuevo_estado_reg = "Cancelado" if ref_limpia_inline else "Pendiente por Cancelar"
+                ref_ingresada = st.text_input("Ref (6 dígitos)", value=referencia, key=f"ref_input_{id_r}", max_chars=6, placeholder="Ej: 123456")
+                nuevo_estado = "Cancelado" if ref_ingresada.strip() else "Pendiente por Cancelar"
+                if ref_ingresada.strip() != referencia:
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    c.execute("UPDATE ventas SET referencia=?, estado=? WHERE id=?", (ref_limpia_inline, nuevo_estado_reg, id_r))
+                    c.execute("UPDATE ventas SET referencia=?, estado=? WHERE id=?", (ref_ingresada.strip(), nuevo_estado, id_r))
                     conn.commit()
                     conn.close()
                     st.rerun()
-            
+
             with c_acciones:
-                col_acc1, col_acc2 = st.columns(2)
-                with col_acc1:
-                    with st.popover("✏️"):
-                        st.markdown("##### 🎴 Edición Avanzada")
-                        with st.form(key=f"form_edit_{id_r}"):
-                            nuevos_nums = st.text_input("🔢 Números", value=numeros)
-                            nuevo_cliente = st.text_input("👤 Cliente", value=cliente)
-                            nueva_ref_avanzada = st.text_input("Últimos 6 dígitos", value=referencia, max_chars=6)
-                            nuevo_estado = st.selectbox("Estado", ["Pendiente por Cancelar", "Cancelado"], index=0 if estado != "Cancelado" else 1)
-                            
-                            if st.form_submit_button("Actualizar", use_container_width=True):
-                                nums_val_edit = [int(n) for n in re.findall(r"\b\d+\b", nuevos_nums) if 1 <= int(n) <= 630]
-                                ref_avanzada_limpia = nueva_ref_avanzada.strip()[-6:] if nueva_ref_avanzada.strip() else ""
-                                if not nuevo_cliente.strip():
-                                    st.error("Vacío.")
-                                elif not nums_val_edit:
-                                    st.error("Inválidos.")
-                                else:
-                                    conn = sqlite3.connect(DB_NAME)
-                                    c = conn.cursor()
-                                    c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=?, cliente=? WHERE id=?",
-                                              (", ".join(map(str, sorted(set(nums_val_edit)))), len(set(nums_val_edit)), nuevo_estado, ref_avanzada_limpia, nuevo_cliente.strip(), id_r))
-                                    conn.commit()
-                                    conn.close()
-                                    st.rerun()
-                with col_acc2:
-                    if st.button("🗑️", key=f"del_{id_r}", help="Eliminar registro"):
-                        conn = sqlite3.connect(DB_NAME)
-                        c = conn.cursor()
-                        c.execute("DELETE FROM ventas WHERE id=?", (id_r,))
-                        conn.commit()
-                        conn.close()
-                        st.rerun()
-
-    # Tarjetas de notificaciones huérfanas simplificadas para nuevos clientes
-    clientes_en_db = [r[2].strip().lower() for r in filas_db]
-    nuevas_notifs_huerfanas = [n for n in notificaciones_pendientes if n.get("cliente", "").strip().lower() not in clientes_en_db]
-
-    if nuevas_notifs_huerfanas:
-        st.markdown("---")
-        st.markdown("#### 🆕 Novedades de Nuevos Clientes")
-        
-        for idx_h, n_huerfana in enumerate(nuevas_notifs_huerfanas):
-            with st.container(border=True):
-                st.markdown(f"**👤 Cliente:** `{n_huerfana['cliente']}`")
-                tipo_nh = n_huerfana["tipo"]
-                
-                if tipo_nh == "pendiente_azar":
-                    cols_ha1, cols_ha2 = st.columns([2, 1])
-                    with cols_ha1:
-                        st.caption(f"🎲 Azar pedido: {n_huerfana['cantidad']} un.")
-                    with cols_ha2:
-                        if st.button("✅ Asignar", key=f"btn_h_azar_{idx_h}", use_container_width=True):
-                            conn = sqlite3.connect(DB_NAME)
-                            c = conn.cursor()
-                            c.execute("SELECT numeros FROM ventas")
-                            filas_actuales = c.fetchall()
-                            ocupados_en_memoria = set()
-                            for f_nums, in filas_actuales:
-                                for n in re.findall(r"\b\d+\b", f_nums):
-                                    ocupados_en_memoria.add(int(n))
-                            disponibles_reales = [n for n in range(1, 631) if n not in ocupados_en_memoria]
-
-                            if len(disponibles_reales) < n_huerfana['cantidad']:
-                                st.error("No hay suficientes cartones.")
-                            else:
-                                cartones_asignados = sorted(random.sample(disponibles_reales, n_huerfana['cantidad']))
-                                ref_wpp = n_huerfana['ref']
-                                estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
-
-                                c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                          (datetime.now().strftime("%Y-%m-%d %H:%M"), n_huerfana['cliente'], ", ".join(map(str, cartones_asignados)), n_huerfana['cantidad'], estado_reg, ref_wpp))
-                                conn.commit()
-                                conn.close()
-
-                                st.session_state["pendientes_pendientes_wpp"].remove(n_huerfana)
-                                st.rerun()
-
-                elif tipo_nh == "solo_no_disponibles":
-                    if n_huerfana.get("no_disponibles"):
-                        cols_hn1, cols_hn2 = st.columns([2, 1])
-                        with cols_hn1:
-                            texto_copiable = ", ".join(map(str, n_huerfana['no_disponibles']))
-                            st.markdown(f"🚫 **No disponible:** `{texto_copiable}`")
-                        with cols_hn2:
-                            if st.button("❌ Borrar Notif.", key=f"cerrar_huerfana_{idx_h}", use_container_width=True):
-                                if n_huerfana in st.session_state["pendientes_pendientes_wpp"]:
-                                    st.session_state["pendientes_pendientes_wpp"].remove(n_huerfana)
-                                st.rerun()
-
-elif menu_seleccionado == "🎟️ Matriz (1-630)":
-    st.markdown("#### Matriz de Cartones (1 al 630)")
-    st.caption("✨ Vista previa con números ocupados en tono translúcido/atenuado")
-    
-    html_matriz = """
-    <div style="background-color: #ffffff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; overflow-x: auto;">
-        <div style="display: grid; grid-template-columns: repeat(20, minmax(36px, 1fr)); gap: 6px; text-align: left;">
-    """
-    
-    for num in range(1, 631):
-        if num in cartones_ocupados:
-            html_matriz += f"""
-            <div style="
-                font-family: Arial, sans-serif;
-                font-weight: bold;
-                font-size: 14px;
-                color: #e2e8f0;
-                padding: 4px 0;
-            ">{num}</div>
-            """
-        else:
-            html_matriz += f"""
-            <div style="
-                font-family: Arial, sans-serif;
-                font-weight: bold;
-                font-size: 14px;
-                color: #000000;
-                padding: 4px 0;
-            ">{num}</div>
-            """
-            
-    html_matriz += """
-        </div>
-    </div>
-    """
-    
-    components.html(html_matriz, height=750, scrolling=True)
+                st.write("")
+                if st.button("🗑️", key=f"del_{id_r}", help="Eliminar registro"):
+                    conn = sqlite3.connect(DB_NAME)
+                    c = conn.cursor()
+                    c.execute("DELETE FROM ventas WHERE id=?", (id_r,))
+                    conn.commit()
+                    conn.close()
+                    st.rerun()
