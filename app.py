@@ -65,11 +65,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Obtener datos de la base de datos
+# Obtener datos de la base de datos ordenados del más reciente al más antiguo (ID descendiente)
 def obtener_ventas():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute("SELECT id, fecha, cliente, numeros, cantidad, estado, referencia FROM ventas")
+    c.execute("SELECT id, fecha, cliente, numeros, cantidad, estado, referencia FROM ventas ORDER BY id DESC")
     filas = c.fetchall()
     conn.close()
     return filas
@@ -157,6 +157,10 @@ with st.sidebar:
     if st.button("📋", use_container_width=True, help="Ventas y Registro"):
         st.session_state["menu_activo"] = "📋 Ventas y Registro"
         st.rerun()
+
+    if st.button("🗃️", use_container_width=True, help="Historial Definitivo"):
+        st.session_state["menu_activo"] = "🗃️ Historial Definitivo"
+        st.rerun()
         
     if st.button("🎟️", use_container_width=True, help="Matriz (1-630)"):
         st.session_state["menu_activo"] = "🎟️ Matriz (1-630)"
@@ -240,6 +244,37 @@ if menu_seleccionado == "📊 Resumen General":
     col_m1.metric("Cartones Ocupados", f"{tot_cartones_vendidos} / 630")
     col_m2.metric("Cartones Libres", f"{630 - tot_cartones_vendidos}")
     col_m3.metric("Recaudación Estimada", f"Bs. {recaudacion_total:,.2f}")
+
+elif menu_seleccionado == "🗃️ Historial Definitivo":
+    st.markdown("#### 🗃️ Historial de Todos los Registros Definitivos")
+    st.caption("Aquí puedes consultar de forma permanente todos los registros que se han ido guardando en el sistema.")
+
+    filas_historial = obtener_ventas()
+    if busqueda:
+        filas_historial = [r for r in filas_historial if busqueda.lower() in f"{r[2]} {r[3]} {r[6]}".lower()]
+
+    if not filas_historial:
+        st.info("No hay registros definitivos guardados todavía.")
+    else:
+        total_acumulado_historial = 0
+        for r in filas_historial:
+            id_r, fecha_r, cliente_r, numeros_r, cantidad_r, estado_r, referencia_r = r
+            monto_r = cantidad_r * precio_unitario
+            total_acumulado_historial += monto_r
+
+            with st.container(border=True):
+                col_h1, col_h2, col_h3 = st.columns([2.5, 2, 1.5])
+                with col_h1:
+                    st.write(f"**👤 {cliente_r}** — *{estado_r}*")
+                    st.caption(f"📅 Fecha: {fecha_r} | Ref: {referencia_r if referencia_r else 'Sin ref'}")
+                with col_h2:
+                    st.markdown(f"Cartones: `{numeros_r}`")
+                    st.caption(f"Cantidad: {cantidad_r} unid.")
+                with col_h3:
+                    st.markdown(f"💰 **Bs. {monto_r:,.2f}**")
+        
+        st.divider()
+        st.markdown(f"##### 💎 **Total General Histórico Recaudado: Bs. {total_acumulado_historial:,.2f}**")
 
 elif menu_seleccionado == "📋 Ventas y Registro":
     with st.expander("➕ Opciones de Registro Rápido", expanded=True):
@@ -520,7 +555,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
     st.divider()
 
-    # Recargar filas de base de datos actualizadas tras inserciones automáticas
+    # Recargar filas de base de datos actualizadas (ordenadas del más nuevo al más antiguo)
     filas_db = obtener_ventas()
     filas_filtradas = []
     for r in filas_db:
@@ -529,7 +564,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         if not busqueda or busqueda.lower() in texto_fila:
             filas_filtradas.append(r)
 
-    st.markdown("#### 📋 Listado General de Registros y Alertas Simplificadas")
+    st.markdown("#### 📋 Listado Activo de Registros (Más Nuevos Arriba)")
 
     notificaciones_pendientes = st.session_state.get("pendientes_pendientes_wpp", [])
 
@@ -541,7 +576,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         notif_asociadas = [n_item for n_item in notificaciones_pendientes if n_item.get("cliente", "").strip().lower() == cliente.strip().lower()]
 
         with st.container(border=True):
-            # Layout principal dividido: Izquierda info, Derecha referencia rápida de 6 dígitos y botón de expandir edición/borrar
             c_info, c_ref_input, c_acciones = st.columns([2.2, 1.8, 0.8])
             
             with c_info:
@@ -677,12 +711,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     st.rerun()
 
             with c_ref_input:
-                # Cuadrito compacto superior derecho para colocar/actualizar referencia de pago extrayendo o limitando a los últimos 6 dígitos
                 st.markdown("<p style='font-size: 11px; color: #94a3b8; margin-bottom: -2px;'>💳 Últenimos 6 dígitos:</p>", unsafe_allow_html=True)
                 key_ref_input = f"ref_rapida_{id_r}"
                 nueva_ref_input = st.text_input("Ref rápida", value=referencia, max_chars=6, label_visibility="collapsed", key=key_ref_input)
                 
-                # Procesar y aislar siempre los últimos 6 dígitos de lo ingresado de forma fluida
                 ref_limpia_inline = nueva_ref_input.strip()[-6:] if nueva_ref_input.strip() else ""
                 
                 if ref_limpia_inline != referencia:
@@ -695,7 +727,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     st.rerun()
             
             with c_acciones:
-                # Botones compactos verticales de edición avanzada y eliminación
                 col_acc1, col_acc2 = st.columns(2)
                 with col_acc1:
                     with st.popover("✏️"):
