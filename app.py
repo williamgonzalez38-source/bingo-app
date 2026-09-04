@@ -293,33 +293,85 @@ elif menu_seleccionado == "🎟️ Matriz (1-630)":
 elif menu_seleccionado == "📋 Ventas y Registro":
     with st.expander("➕ Opciones de Registro Rápido", expanded=True):
         
-        # --- SECCIÓN NUEVA: Lector OCR de Pago Móvil por Imagen ---
+        # --- SECCIÓN: Lector OCR de Pago Móvil con Coincidencia Automática de Cliente ---
         st.markdown("##### 📸 Lector Automático de Pago Móvil (Captura)")
         with st.container(border=True):
             img_pago_subida = st.file_uploader("Sube la captura del pago móvil (PNG o JPG)", type=["png", "jpg", "jpeg"], key="uploader_pago_movil")
             
             if img_pago_subida:
                 if not OCR_DISPONIBLE:
-                    st.error("La librería 'pytesseract' no está instalada en el entorno. Instálala para usar esta función.")
+                    st.error("La librería 'pytesseract' no está instalada en el entorno.")
                 else:
                     try:
                         imagen_pil = Image.open(img_pago_subida)
-                        # Ejecutar OCR en español/inglés
                         texto_extraido = pytesseract.image_to_string(imagen_pil)
                         
-                        # Buscar posibles referencias de 4 a 8 dígitos comunes en pagos móviles (ej: 012345, 12345678)
+                        # Extraer referencia (últimos 6 dígitos)
                         matches_ref = re.findall(r"\b\d{6}\b", texto_extraido)
                         if not matches_ref:
                             matches_ref = re.findall(r"\b\d{4,8}\b", texto_extraido)
+                        ref_detectada = matches_ref[-1][-6:] if matches_ref else ""
                         
-                        if matches_ref:
-                            ref_detectada = matches_ref[-1][-6:] # Tomar los últimos 6 dígitos
-                            st.success(f"¡Referencia extraída con éxito! Últimos 6 dígitos: **{ref_detectada}**")
+                        # Buscar clientes pendientes en la BD para relacionarlos con el texto OCR
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("SELECT id, cliente, numeros, cantidad, referencia FROM ventas WHERE estado = 'Pendiente por Cancelar'")
+                        pendientes_db = c.fetchall()
+                        conn.close()
+                        
+                        cliente_encontrado = None
+                        texto_lower = texto_extraido.lower()
+                        for id_p, cli_p, nums_p, cant_p, ref_p in pendientes_db:
+                            nombre_partes = cli_p.lower().split()
+                            if any(parte in texto_lower for parte in nombre_partes if len(parte) > 2):
+                                cliente_encontrado = (id_p, cli_p, nums_p, cant_p)
+                                break
+                        
+                        if ref_detectada and cliente_encontrado:
+                            id_c, nombre_c, nums_c, cant_c = cliente_encontrado
+                            monto_c = cant_c * precio_unitario
+                            
+                            if "aprobaciones_ocr_pendientes" not in st.session_state:
+                                st.session_state["aprobaciones_ocr_pendientes"] = []
+                            
+                            nueva_aprob = {"id": id_c, "cliente": nombre_c, "ref": ref_detectada, "monto": monto_c, "numeros": nums_c}
+                            if nueva_aprob not in st.session_state["aprobaciones_ocr_pendientes"]:
+                                st.session_state["aprobaciones_ocr_pendientes"].append(nueva_aprob)
+                            
+                            st.success(f"¡Coincidencia encontrada! Cliente: **{nombre_c}** | Ref: **{ref_detectada}** (Revisa abajo para dar el visto bueno)")
+                        elif ref_detectada:
+                            st.success(f"Referencia extraída: **{ref_detectada}** (No se asoció automáticamente a ningún pendiente, úsala en el formulario)")
                             st.session_state["ref_ocr_autocompletada"] = ref_detectada
                         else:
-                            st.warning("No se pudo detectar automáticamente la referencia en la imagen. Intenta recortarla o ingresarla manual.")
+                            st.warning("No se pudo detectar la referencia en la imagen.")
                     except Exception as e:
                         st.error(f"Error al procesar la imagen: {e}")
+
+        # --- PANEL DE APROBACIONES PENDIENTES OCR ---
+        aprobaciones_pendientes = st.session_state.get("aprobaciones_ocr_pendientes", [])
+        if aprobaciones_pendientes:
+            st.markdown("---")
+            st.markdown("##### 🔔 Aprobaciones Pendientes por Coincidencia OCR")
+            for ap in list(aprobaciones_pendientes):
+                with st.container(border=True):
+                    col_ap1, col_ap2, col_ap3 = st.columns([2.5, 1.5, 1])
+                    with col_ap1:
+                        st.write(f"**👤 {ap['cliente']}** (Cartones: `{ap['numeros']}`)")
+                        st.caption(f"Ref detectada: `{ap['ref']}` | Monto a Cancelar: **Bs. {ap['monto']:,.2f}**")
+                    with col_ap2:
+                        if st.button("✅ Dar Visto Bueno (Cancelar)", key=f"aprobar_ocr_{ap['id']}_{ap['ref']}", use_container_width=True):
+                            conn = sqlite3.connect(DB_NAME)
+                            c = conn.cursor()
+                            c.execute("UPDATE ventas SET referencia=?, estado='Cancelado' WHERE id=?", (ap['ref'], ap['id']))
+                            conn.commit()
+                            conn.close()
+                            st.session_state["aprobaciones_ocr_pendientes"].remove(ap)
+                            st.success(f"¡Pago de {ap['cliente']} aprobado y marcado como Cancelado!")
+                            st.rerun()
+                    with col_ap3:
+                        if st.button("❌ Descartar", key=f"descartar_ocr_{ap['id']}_{ap['ref']}", use_container_width=True):
+                            st.session_state["aprobaciones_ocr_pendientes"].remove(ap)
+                            st.rerun()
 
         st.markdown("##### ➕ Registrar Manual")
         
@@ -372,7 +424,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                   (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), nums_str, len(set(nums_val)), estado_reg, ref_limpia))
                         conn.commit()
                         conn.close()
-                        # Limpiar cache OCR si se usó
                         if "ref_ocr_autocompletada" in st.session_state:
                             del st.session_state["ref_ocr_autocompletada"]
                         st.success("¡Cliente registrado con éxito!")
@@ -599,6 +650,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     conn.close()
                     if "pendientes_pendientes_wpp" in st.session_state:
                         st.session_state["pendientes_pendientes_wpp"] = []
+                    if "aprobaciones_ocr_pendientes" in st.session_state:
+                        st.session_state["aprobaciones_ocr_pendientes"] = []
                     st.success("¡Base de datos borrada por completo con éxito!")
                     st.rerun()
 
