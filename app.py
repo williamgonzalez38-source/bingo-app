@@ -322,11 +322,22 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         if "pendientes_pendientes_wpp" not in st.session_state:
                             st.session_state["pendientes_pendientes_wpp"] = []
                         
+                        # Evitar duplicados con lo que ya tenía el cliente en la BD
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("SELECT numeros FROM ventas WHERE id=?", (cliente_existente[0],))
+                        row_actual_nums = c.fetchone()
+                        conn.close()
+                        nums_existentes_bd = [int(n) for n in re.findall(r"\b\d+\b", row_actual_nums[0])] if row_actual_nums else []
+                        
+                        unicos_nuevos = [n for n in nums_val if n not in nums_existentes_bd and n not in cartones_ocupados]
+                        unicos_no_disp = [n for n in nums_val if n in cartones_ocupados]
+
                         st.session_state["pendientes_pendientes_wpp"].append({
                             "tipo": "pendiente_nombre_duplicado",
                             "cliente": cli_input.strip(),
-                            "nuevos_asignados": [n for n in nums_val if n not in cartones_ocupados],
-                            "nuevos_no_disponibles": [n for n in nums_val if n in cartones_ocupados],
+                            "nuevos_asignados": unicos_nuevos,
+                            "nuevos_no_disponibles": unicos_no_disp,
                             "ref": ref_limpia
                         })
                         st.warning(f"⚠️ El cliente '{cli_input.strip()}' ya existe. Se registró la alerta abajo.")
@@ -358,7 +369,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                 texto_wpp_unificado = st.text_area(
                     "Pega aquí la selección de WhatsApp", 
                     key=key_text_area,
-                    placeholder="Pega aquí el texto copiado de WhatsApp..."
+                    placeholder="Pega hier el texto copiado de WhatsApp..."
                 )
                 
                 col_btn_w1, col_btn_w2 = st.columns(2)
@@ -416,7 +427,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     lineas_bloque = [l.strip() for l in bloque_s.split('\n') if l.strip()]
                                     if lineas_bloque:
                                         primera_linea = lineas_bloque[0]
-                                        # Si la línea no es solo números y tiene longitud razonable de nombre
                                         if not re.fullmatch(r'[\d,\s\-]+', primera_linea) and len(primera_linea.split()) <= 4:
                                             primera_limpia = re.sub(r'\[.*?\]', '', primera_linea).replace(':', '').strip()
                                             if primera_limpia:
@@ -495,14 +505,21 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     cartones_no_disponibles.append(num_req)
 
                             if cartones_asignados or cartones_no_disponibles:
-                                c.execute("SELECT id FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (nombre_cliente,))
+                                c.execute("SELECT id, numeros FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (nombre_cliente,))
                                 cliente_db_existente = c.fetchone()
 
                                 if cliente_db_existente:
+                                    # CORRECCIÓN: Filtrar para que solo tome números que el cliente NO tenga ya asignados en la BD
+                                    c.execute("SELECT numeros FROM ventas WHERE id=?", (cliente_db_existente[0],))
+                                    row_actual_nums = c.fetchone()
+                                    nums_existentes_bd = [int(n) for n in re.findall(r"\b\d+\b", row_actual_nums[0])] if row_actual_nums else []
+                                    
+                                    unicos_nuevos = [n for n in cartones_asignados if n not in nums_existentes_bd]
+                                    
                                     pendientes_cola.append({
                                         "tipo": "pendiente_nombre_duplicado",
                                         "cliente": nombre_cliente,
-                                        "nuevos_asignados": cartones_asignados,
+                                        "nuevos_asignados": unicos_nuevos,
                                         "nuevos_no_disponibles": cartones_no_disponibles,
                                         "ref": ref_wpp
                                     })
@@ -613,7 +630,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         if n_nuevo not in combinados:
                                             combinados.append(n_nuevo)
 
-                                    nums_combinados_str = ", ".join(map(str, combinados))
+                                    nums_combinados_str = ", ".join(map(str, sorted(combinados)))
                                     ref_final = referencia if referencia else notif_asociada['ref']
                                     estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
                                     
@@ -699,7 +716,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         if n_prop not in combinados:
                                             combinados.append(n_prop)
 
-                                    nums_combinados_str = ", ".join(map(str, combinados))
+                                    nums_combinados_str = ", ".join(map(str, sorted(combinados)))
                                     ref_final = referencia if referencia else notif_asociada['ref']
                                     estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
                                     
