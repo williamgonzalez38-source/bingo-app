@@ -295,7 +295,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             with col_f3:
                 ref_input = st.text_input("Últimos 6 dígitos", max_chars=6)
             
-            submitted = st.form_submit_button("Guardار Registro")
+            submitted = st.form_submit_button("Guardar Registro")
             
             if submitted:
                 nums_val = [int(n) for n in re.findall(r"\b\d+\b", nums_input) if 1 <= int(n) <= 630]
@@ -368,8 +368,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # Agrupación inteligente por bloques de mensajes / chats
-                        bloques_mensajes = re.split(r'\n(?=[a-zA-ZáéíóúÁÉÍÓÚñÑ]+\s*:|\[\d{2}/\d{2}/\d{4})', texto_wpp_unificado)
+                        # Agrupación inteligente corregida para separar múltiples contactos y mantener mensajes multilínea
+                        bloques_mensajes = re.split(r'\n(?=\s*\[|\b[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+\s*:)', texto_wpp_unificado)
                         if not bloques_mensajes:
                             bloques_mensajes = [texto_wpp_unificado]
 
@@ -407,13 +407,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             else:
                                 nombre_cliente = ultimo_cliente
 
-                            # Extraer referencia bancaria de 4 a 6 dígitos en el bloque
+                            # Extraer referencia bancaria de 4 a 12 dígitos en el bloque
                             ref_wpp_match = re.search(r'(?:operación|operacion|ref|referencia)[:\s]*(\d{4,12})', texto_lower)
                             ref_wpp = ""
                             if ref_wpp_match:
                                 ref_wpp = ref_wpp_match.group(1)[-6:]
                             else:
-                                # Buscar cualquier número de referencia largo típico de pago móvil
                                 match_nums_largos = re.findall(r'\b\d{6,}\b', bloque_s)
                                 if match_nums_largos:
                                     ref_wpp = match_nums_largos[0][-6:]
@@ -450,7 +449,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             pide_azar = ("azar" in texto_lower or "aleatorio" in texto_lower or cantidad_azar_solicitada > 0)
 
                             if pide_azar and cantidad_azar_solicitada > 0:
-                                # Verificar si ya existe el cliente en la BD para agregarlo como pendiente o insertarlo directo con azar
                                 c.execute("SELECT id, numeros FROM ventas WHERE LOWER(TRIM(cliente)) = LOWER(TRIM(?))", (nombre_cliente,))
                                 cliente_db_existente = c.fetchone()
 
@@ -462,7 +460,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         "ref": ref_wpp
                                     })
                                 else:
-                                    # Generar directamente los cartones al azar de inmediato
                                     libres_disponibles = [n for n in range(1, 631) if n not in ocupados_en_memoria]
                                     if len(libres_disponibles) >= cantidad_azar_solicitada:
                                         cartones_asignados = sorted(random.sample(libres_disponibles, cantidad_azar_solicitada))
