@@ -365,7 +365,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             ref_wpp = ref_wpp_match.group(0) if ref_wpp_match else ""
 
                             texto_lower = cuerpo_mensaje.lower()
-                            palabras_clave_azar = ["azar", "aleatorio"]
+                            
+                            # Palabras clave ampliadas para detectar condiciones de reemplazo al azar
+                            palabras_clave_azar = ["azar", "aleatorio", "ocupados", "si no", "o al azar"]
                             pide_azar = any(palabra in texto_lower for palabra in palabras_clave_azar)
 
                             todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", cuerpo_mensaje)]
@@ -375,8 +377,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 candidatos_num = [n for n in candidatos_num if str(n) != ref_wpp]
 
                             cantidad_azar_solicitada = 0
-                            if pide_azar and len(candidatos_num) > 0:
-                                for palabra in palabras_clave_azar:
+                            if "azar" in texto_lower or "aleatorio" in texto_lower:
+                                for palabra in ["azar", "aleatorio"]:
                                     if palabra in texto_lower:
                                         idx_palabra = texto_lower.find(palabra)
                                         texto_antes = texto_lower[:idx_palabra]
@@ -390,7 +392,27 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                             candidatos_num = []
                                         break
 
-                            if pide_azar and cantidad_azar_solicitada > 0 and not candidatos_num:
+                            # Evaluación de disponibilidad real en memoria
+                            cartones_asignados = []
+                            cartones_no_disponibles = []
+
+                            for num_req in candidatos_num:
+                                if num_req not in ocupados_en_memoria:
+                                    cartones_asignados.append(num_req)
+                                else:
+                                    cartones_no_disponibles.append(num_req)
+
+                            # RESTRICCIÓN NUEVA: Si pide números específicos y condición al azar, y hay ocupados -> Alerta interactiva
+                            if cartones_no_disponibles and pide_azar:
+                                clientes_procesados_cola.append({
+                                    "tipo": "pendiente_azar_condicional",
+                                    "cliente": nombre_cliente,
+                                    "solicitados": candidatos_num,
+                                    "ocupados": cartones_no_disponibles,
+                                    "libres": cartones_asignados,
+                                    "ref": ref_wpp
+                                })
+                            elif pide_azar and len(candidatos_num) == 0 and cantidad_azar_solicitada > 0:
                                 clientes_procesados_cola.append({
                                     "tipo": "pendiente_azar",
                                     "cliente": nombre_cliente,
@@ -398,28 +420,11 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     "ref": ref_wpp
                                 })
                             else:
-                                cartones_asignados = []
-                                cartones_no_disponibles = []
-
-                                for num_req in candidatos_num:
-                                    if num_req not in ocupados_en_memoria:
-                                        cartones_asignados.append(num_req)
-                                    else:
-                                        cartones_no_disponibles.append(num_req)
-
                                 cartones_completados_azar = []
-                                if pide_azar:
-                                    faltantes_por_completar = cantidad_azar_solicitada if cantidad_azar_solicitada > len(cartones_asignados) else (len(cartones_no_disponibles) if not cartones_asignados and cantidad_azar_solicitada == 0 else 0)
-                                    
-                                    if not cantidad_azar_solicitada and cartones_no_disponibles:
-                                        faltantes_por_completar = len(cartones_no_disponibles)
+                                if pide_azar and len(candidatos_num) > 0 and not cartones_no_disponibles:
+                                    pass
 
-                                    if faltantes_por_completar > 0:
-                                        disponibles_reales = [n for n in range(1, 631) if n not in ocupados_en_memoria and n not in cartones_asignados]
-                                        if len(disponibles_reales) >= faltantes_por_completar:
-                                            cartones_completados_azar = sorted(random.sample(disponibles_reales, faltantes_por_completar))
-
-                                todos_finales_cliente = cartones_asignados + cartones_completados_azar
+                                todos_finales_cliente = cartones_asignados + cartones_no_disponibles
 
                                 if todos_finales_cliente:
                                     for n in todos_finales_cliente:
@@ -461,7 +466,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         if clientes_procesados_cola:
                             st.session_state["wpp_version"] += 1
                             st.session_state["tarjetas_clientes_wpp"] = clientes_procesados_cola
-                            st.success("¡Importación analizada por cliente con restricciones de números y azar exitosamente!")
+                            st.success("¡Importación analizada con éxito y lista para revisión!")
                             st.rerun()
                         else:
                             st.error("No se pudieron extraer datos válidos de los chats seleccionados.")
@@ -582,6 +587,68 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     else:
                         tarjetas_restantes.append(tarjeta)
 
+                elif tarjeta["tipo"] == "pendiente_azar_condicional":
+                    st.markdown(f"⚠️ **Conflicto y Condición Al Azar:** 👤 **{tarjeta['cliente']}** pidió los cartones `{tarjeta['solicitados']}`.")
+                    st.warning(f"Los siguientes números ya estaban ocupados: `{tarjeta['ocupados']}`. Como indicó condición al azar, puedes aprobarlos y el sistema reemplazará los ocupados por números libres al azar.")
+                    
+                    col_conf1, col_conf2 = st.columns(2)
+                    with col_conf1:
+                        btn_aprobar_cond = st.button("✅ Sí, Asignar con reemplazo al azar", key=f"btn_aprobar_cond_{i}", use_container_width=True)
+                    with col_conf2:
+                        btn_rechazar_cond = st.button("❌ Rechazar", key=f"btn_rechazar_cond_{i}", use_container_width=True)
+
+                    if btn_aprobar_cond:
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("SELECT numeros FROM ventas")
+                        filas_actuales = c.fetchall()
+                        ocupados_en_memoria = set()
+                        for f_nums, in filas_actuales:
+                            for n in re.findall(r"\b\d+\b", f_nums):
+                                ocupados_en_memoria.add(int(n))
+
+                        cartones_finales_aprobados = list(tarjeta['libres'])
+                        faltantes_cantidad = len(tarjeta['ocupados'])
+                        
+                        disponibles_reales = [n for n in range(1, 631) if n not in ocupados_en_memoria and n not in cartones_finales_aprobados]
+
+                        if len(disponibles_reales) < faltantes_cantidad:
+                            st.error(f"No hay suficientes cartones libres para el reemplazo. Solo quedan {len(disponibles_reales)}.")
+                            tarjetas_restantes.append(tarjeta)
+                        else:
+                            reemplazos_azar = sorted(random.sample(disponibles_reales, faltantes_cantidad))
+                            cartones_finales_aprobados = sorted(cartones_finales_aprobados + reemplazos_azar)
+                            
+                            ref_wpp = tarjeta['ref']
+                            c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (tarjeta['cliente'],))
+                            cliente_db_existente = c.fetchone()
+
+                            if cliente_db_existente:
+                                id_db, nums_db_str, ref_db = cliente_db_existente
+                                nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", nums_db_str)]
+                                cartones_combinados = sorted(list(set(nums_db_lista + cartones_finales_aprobados)))
+                                nums_combinados_str = ", ".join(map(str, cartones_combinados))
+                                
+                                ref_final = ref_db if ref_db else ref_wpp
+                                estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
+                                
+                                c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
+                                          (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_db))
+                            else:
+                                estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
+                                c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                          (datetime.now().strftime("%Y-%m-%d %H:%M"), tarjeta['cliente'], ", ".join(map(str, cartones_finales_aprobados)), len(cartones_finales_aprobados), estado_reg, ref_wpp))
+
+                            conn.commit()
+                            conn.close()
+                            st.success(f"¡Asignación completada con éxito para {tarjeta['cliente']} incluyendo los reemplazos al azar!")
+                            st.rerun()
+
+                    elif btn_rechazar_cond:
+                        st.info(f"Solicitud de {tarjeta['cliente']} descartada.")
+                    else:
+                        tarjetas_restantes.append(tarjeta)
+
                 elif tarjeta["tipo"] == "asignado_o_aviso":
                     st.markdown(f"👤 **Cliente:** {tarjeta['cliente']}")
                     
@@ -591,44 +658,8 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if tarjeta["no_disponibles"]:
                         st.warning(f"⚠️ Los siguientes cartones que pidió no estaban disponibles: " + ", ".join(map(str, tarjeta["no_disponibles"])))
 
-                    # Corrección del KeyError usando .get() para evitar caídas si la clave no fue inicializada
                     if tarjeta.get("completados_azar"):
-                        st.info(f"🎲 Como pidió la opción por si acaso o faltaron números, se le completaron al azar con: " + ", ".join(map(str, tarjeta["completados_azar"])))
-
-                        todos_otorgados = tarjeta["asignados"] + tarjeta["completados_azar"]
-                        texto_copiar_cliente = f"Hola {tarjeta['cliente']}, algunos de tus números no estaban disponibles, pero se te asignaron en total: " + ", ".join(map(str, todos_otorgados))
-                        
-                        btn_id_c = f"btn_copiar_cli_{i}"
-                        div_id_c = f"div_cli_{i}"
-                        
-                        html_btn_cliente = f"""
-                        <div id="{div_id_c}" style="margin-top: 6px;">
-                            <button id="{btn_id_c}" onclick="copiarCliente_{i}()" style="
-                                background-color: #2563eb;
-                                color: white;
-                                border: none;
-                                padding: 5px 10px;
-                                font-size: 11px;
-                                font-weight: bold;
-                                border-radius: 4px;
-                                cursor: pointer;
-                                font-family: sans-serif;
-                            ">📋 Copiar aviso para este cliente</button>
-                        </div>
-                        <script>
-                        async function copiarCliente_{i}() {{
-                            try {{
-                                await navigator.clipboard.writeText("{texto_copiar_cliente.replace('"', '\\"')}");
-                                const btn = document.getElementById("{btn_id_c}");
-                                btn.style.backgroundColor = '#16a34a';
-                                btn.innerText = '¡Copiado al portapapeles!';
-                            }} catch (err) {{
-                                console.error(err);
-                            }}
-                        }}
-                        </script>
-                        """
-                        components.html(html_btn_cliente, height=40)
+                        st.info(f"🎲 Se completaron al azar con: " + ", ".join(map(str, tarjeta["completados_azar"])))
 
                     if not st.button("🗑️ Cerrar esta tarjeta", key=f"cerrar_tarjeta_{i}"):
                         tarjetas_restantes.append(tarjeta)
