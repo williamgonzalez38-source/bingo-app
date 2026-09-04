@@ -298,7 +298,15 @@ elif menu_seleccionado == "📋 Ventas y Registro":
             submitted = st.form_submit_button("Guardar Registro")
             
             if submitted:
-                nums_val = [int(n) for n in re.findall(r"\b\d+\b", nums_input) if 1 <= int(n) <= 630]
+                # Mantener el orden exacto de aparición del resaltado (sin ordenar de menor a mayor)
+                nums_val = []
+                seen_nums = set()
+                for n_str in re.findall(r"\b\d+\b", nums_input):
+                    val = int(n_str)
+                    if 1 <= val <= 630 and val not in seen_nums:
+                        seen_nums.add(val)
+                        nums_val.append(val)
+
                 ref_limpia = ref_input.strip()[-6:] if ref_input.strip() else ""
                 if not cli_input.strip():
                     st.error("Debe indicar el nombre del cliente.")
@@ -325,11 +333,11 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         st.warning(f"⚠️ El cliente '{cli_input.strip()}' ya existe. Se registró la alerta abajo.")
                     else:
                         estado_reg = "Cancelado" if ref_limpia else "Pendiente por Cancelar"
-                        nums_str = ", ".join(map(str, sorted(set(nums_val))))
+                        nums_str = ", ".join(map(str, nums_val))
                         conn = sqlite3.connect(DB_NAME)
                         c = conn.cursor()
                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), nums_str, len(set(nums_val)), estado_reg, ref_limpia))
+                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), nums_str, len(nums_val), estado_reg, ref_limpia))
                         conn.commit()
                         conn.close()
                         st.success("¡Cliente registrado con éxito!")
@@ -368,7 +376,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     if not texto_wpp_unificado.strip():
                         st.warning("El campo de texto está vacío.")
                     else:
-                        # Agrupación inteligente corregida para separar múltiples contactos y mantener mensajes multilínea
                         bloques_mensajes = re.split(r'\n(?=\s*\[|\b[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+\s*:)', texto_wpp_unificado)
                         if not bloques_mensajes:
                             bloques_mensajes = [texto_wpp_unificado]
@@ -392,7 +399,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                             texto_lower = bloque_s.lower()
 
-                            # Detectar nombre del cliente en el bloque
                             nombre_cliente = ""
                             match_chat = re.search(r'\[.*?\]\s*([^:]+):', bloque_s)
                             if match_chat:
@@ -407,7 +413,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             else:
                                 nombre_cliente = ultimo_cliente
 
-                            # Extraer referencia bancaria de 4 a 12 dígitos en el bloque
                             ref_wpp_match = re.search(r'(?:operación|operacion|ref|referencia)[:\s]*(\d{4,12})', texto_lower)
                             ref_wpp = ""
                             if ref_wpp_match:
@@ -417,7 +422,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                 if match_nums_largos:
                                     ref_wpp = match_nums_largos[0][-6:]
 
-                            # Detectar cantidad pedida al azar (Ej: "4 cartones al azar", "3 al azar")
                             cantidad_azar_solicitada = 0
                             match_azar_cant = re.search(r'(\d+)\s*(?:cartones|carton|boletos|ticket)?\s*(?:al\s*azar|aleatorio)', texto_lower)
                             if match_azar_cant:
@@ -478,9 +482,14 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                         })
                                 continue
 
-                            # Procesamiento normal para cartones específicos fijos
+                            # Procesamiento de cartones específicos manteniendo el orden exacto del resaltado
                             todos_numeros = [int(n) for n in re.findall(r"\b\d+\b", bloque_s)]
-                            candidatos_num = [n for n in todos_numeros if 1 <= n <= 630 and len(str(n)) <= 3 and str(n) != ref_wpp]
+                            candidatos_num = []
+                            seen_candidatos = set()
+                            for n in todos_numeros:
+                                if 1 <= n <= 630 and len(str(n)) <= 3 and str(n) != ref_wpp and n not in seen_candidatos:
+                                    seen_candidatos.add(n)
+                                    candidatos_num.append(n)
 
                             cartones_asignados = []
                             cartones_no_disponibles = []
@@ -510,7 +519,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                                         estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
                                         c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, sorted(cartones_asignados))), len(cartones_asignados), estado_reg, ref_wpp))
+                                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, cartones_asignados)), len(cartones_asignados), estado_reg, ref_wpp))
 
                                     if cartones_no_disponibles:
                                         pendientes_cola.append({
@@ -604,13 +613,19 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     conn = sqlite3.connect(DB_NAME)
                                     c = conn.cursor()
                                     nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
-                                    cartones_combinados = sorted(list(set(nums_db_lista + notif_asociada['nuevos_asignados'])))
-                                    nums_combinados_str = ", ".join(map(str, cartones_combinados))
+                                    
+                                    # Combinar manteniendo el orden de los existentes y agregando los nuevos en orden de selección
+                                    combinados = nums_db_lista.copy()
+                                    for n_nuevo in notif_asociada['nuevos_asignados']:
+                                        if n_nuevo not in combinados:
+                                            combinados.append(n_nuevo)
+
+                                    nums_combinados_str = ", ".join(map(str, combinados))
                                     ref_final = referencia if referencia else notif_asociada['ref']
                                     estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
                                     
                                     c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                              (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_r))
+                                              (nums_combinados_str, len(combinados), estado_reg, ref_final, id_r))
                                     conn.commit()
                                     conn.close()
                                     
@@ -685,13 +700,18 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     conn = sqlite3.connect(DB_NAME)
                                     c = conn.cursor()
                                     nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
-                                    cartones_combinados = sorted(list(set(nums_db_lista + numeros_propuestos)))
-                                    nums_combinados_str = ", ".join(map(str, cartones_combinados))
+                                    
+                                    combinados = nums_db_lista.copy()
+                                    for n_prop in numeros_propuestos:
+                                        if n_prop not in combinados:
+                                            combinados.append(n_prop)
+
+                                    nums_combinados_str = ", ".join(map(str, combinados))
                                     ref_final = referencia if referencia else notif_asociada['ref']
                                     estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
                                     
                                     c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
-                                              (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_r))
+                                              (nums_combinados_str, len(combinados), estado_reg, ref_final, id_r))
                                     conn.commit()
                                     conn.close()
                                     
