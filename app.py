@@ -310,7 +310,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                 texto_wpp_unificado = st.text_area(
                     "Pega aquí la selección de WhatsApp (uno o varios contactos)", 
                     key=key_text_area,
-                    placeholder="Pega hier el texto copiado de WhatsApp..."
+                    placeholder="Pega aquí el texto copiado de WhatsApp..."
                 )
                 
                 col_btn_w1, col_btn_w2 = st.columns(2)
@@ -549,13 +549,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                 st.caption(f"Cartones: {numeros} ({cant_cartones} unid.)")
                 st.markdown(f"💰 **Total: Bs. {monto_total:,.2f}**")
                 
-                # --- BOTONES DE ALERTA PEQUEÑOS Y SIMPLIFICADOS EN LÍNEA ---
+                # --- ALERTA EXACTAMENTE ABAJO DEL MONTO EN BOLÍVARES ---
                 for notif_asociada in notif_asociadas:
                     tipo_n = notif_asociada["tipo"]
                     
                     if tipo_n == "pendiente_nombre_duplicado":
                         if notif_asociada.get('nuevos_asignados'):
-                            st.markdown("---")
                             cols_b1, cols_b2 = st.columns([2, 1])
                             with cols_b1:
                                 st.caption(f"⚠️ Libres a sumar: `{notif_asociada['nuevos_asignados']}`")
@@ -580,13 +579,12 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     st.rerun()
 
                         if notif_asociada.get('nuevos_no_disponibles'):
-                            st.markdown("---")
                             cols_o1, cols_o2 = st.columns([2, 1])
                             with cols_o1:
                                 texto_copiable = ", ".join(map(str, notif_asociada['nuevos_no_disponibles']))
-                                st.code(texto_copiable, language="text")
+                                st.markdown(f"🚫 **No disponible:** `{texto_copiable}`")
                             with cols_o2:
-                                if st.button("❌ Cerrar", key=f"cerrar_dup_{id_r}_{random.randint(100,999)}", use_container_width=True):
+                                if st.button("❌ Borrar Notif.", key=f"cerrar_dup_{id_r}_{random.randint(100,999)}", use_container_width=True):
                                     notif_asociada['nuevos_no_disponibles'] = []
                                     if not notif_asociada.get('nuevos_asignados') and notif_asociada in st.session_state["pendientes_pendientes_wpp"]:
                                         st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
@@ -594,19 +592,17 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                     elif tipo_n == "solo_no_disponibles":
                         if notif_asociada.get('no_disponibles'):
-                            st.markdown("---")
                             cols_s1, cols_s2 = st.columns([2, 1])
                             with cols_s1:
                                 texto_copiable = ", ".join(map(str, notif_asociada['no_disponibles']))
-                                st.code(texto_copiable, language="text")
+                                st.markdown(f"🚫 **No disponible:** `{texto_copiable}`")
                             with cols_s2:
-                                if st.button("❌ Cerrar", key=f"cerrar_solo_{id_r}_{random.randint(100,999)}", use_container_width=True):
+                                if st.button("❌ Borrar Notif.", key=f"cerrar_solo_{id_r}_{random.randint(100,999)}", use_container_width=True):
                                     if notif_asociada in st.session_state["pendientes_pendientes_wpp"]:
                                         st.session_state["pendientes_pendientes_wpp"].remove(notif_asociada)
                                     st.rerun()
 
                     elif tipo_n == "pendiente_azar":
-                        st.markdown("---")
                         cols_az1, cols_az2 = st.columns([2, 1])
                         with cols_az1:
                             st.caption(f"🎲 Azar pedido: {notif_asociada['cantidad']} un.")
@@ -641,10 +637,10 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     st.rerun()
 
                     elif tipo_n == "pendiente_azar_condicional":
-                        st.markdown("---")
                         cols_con1, cols_con2 = st.columns([2, 1])
                         with cols_con1:
-                            st.caption(f"⚠️ Ocupados: {notif_asociada['ocupados']}")
+                            texto_ocupados = ", ".join(map(str, notif_asociada['ocupados']))
+                            st.markdown(f"🚫 **No disponible:** `{texto_ocupados}`")
                         with cols_con2:
                             if st.button("🎲 Reemplazar", key=f"btn_cond_{id_r}", use_container_width=True):
                                 conn = sqlite3.connect(DB_NAME)
@@ -783,9 +779,9 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         cols_hn1, cols_hn2 = st.columns([2, 1])
                         with cols_hn1:
                             texto_copiable = ", ".join(map(str, n_huerfana['no_disponibles']))
-                            st.code(texto_copiable, language="text")
+                            st.markdown(f"🚫 **No disponible:** `{texto_copiable}`")
                         with cols_hn2:
-                            if st.button("❌ Cerrar", key=f"cerrar_huerfana_{idx_h}", use_container_width=True):
+                            if st.button("❌ Borrar Notif.", key=f"cerrar_huerfana_{idx_h}", use_container_width=True):
                                 if n_huerfana in st.session_state["pendientes_pendientes_wpp"]:
                                     st.session_state["pendientes_pendientes_wpp"].remove(n_huerfana)
                                 st.rerun()
