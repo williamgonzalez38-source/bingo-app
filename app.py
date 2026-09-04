@@ -268,11 +268,34 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     estado_reg = "Cancelado" if ref_input.strip() else "Pendiente por Cancelar"
                     conn = sqlite3.connect(DB_NAME)
                     c = conn.cursor()
-                    c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                              (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(nums_val), len(nums_val), estado_reg, ref_input.strip()))
+                    
+                    # Verificar si el cliente ya existe para unificarlo también en el registro manual
+                    c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (cli_input.strip(),))
+                    cliente_existente = c.fetchone()
+                    
+                    if cliente_existente:
+                        id_existente, nums_existentes_str, ref_existente = cliente_existente
+                        nums_existentes = [int(n) for n in re.findall(r"\b\d+\b", nums_existentes_str)]
+                        
+                        # Combinar sin duplicados
+                        nuevos_unicos = sorted(list(set(nums_existentes + nums_val)))
+                        total_nums_combinados = len(nuevos_unicos)
+                        nums_combinados_str = ", ".join(map(str, nuevos_unicos))
+                        
+                        # Mantener referencia si ya la tenía o agregar la nueva
+                        ref_final = ref_existente if ref_existente else ref_input.strip()
+                        estado_reg_final = "Cancelado" if ref_final else "Pendiente por Cancelar"
+                        
+                        c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
+                                  (nums_combinados_str, total_nums_combinados, estado_reg_final, ref_final, id_existente))
+                        st.success(f"¡Cliente existente '{cli_input.strip()}' actualizado! Se le sumaron los nuevos cartones en un solo registro.")
+                    else:
+                        c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                  (datetime.now().strftime("%Y-%m-%d %H:%M"), cli_input.strip(), ", ".join(nums_val), len(nums_val), estado_reg, ref_input.strip()))
+                        st.success("¡Cliente registrado con éxito!")
+                        
                     conn.commit()
                     conn.close()
-                    st.success("¡Cliente registrado con éxito!")
                     st.rerun()
 
         st.divider()
@@ -282,7 +305,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
         with col_inf1:
             st.markdown("##### 📥 Importar Selección Múltiple de WhatsApp (Secuencial en Cascada)")
 
-            # Inicializar versión de WhatsApp para limpiar el cuadro de texto dinámicamente
             if "wpp_version" not in st.session_state:
                 st.session_state["wpp_version"] = 0
 
@@ -302,7 +324,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                     btn_borrar_wpp = st.form_submit_button("🗑️ Borrar", use_container_width=True)
                 
                 if btn_borrar_wpp:
-                    # Incrementamos la versión para forzar a Streamlit a recrear el componente completamente vacío sin errores
                     st.session_state["wpp_version"] += 1
                     st.rerun()
                 
@@ -386,15 +407,34 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                                     else:
                                         cartones_no_disponibles.append(num_req)
 
-                            # Si se pudieron asignar cartones, guardamos e incrementamos la memoria en cascada
+                            # Si se pudieron asignar cartones, unificar o guardar en base de datos
                             if cartones_asignados:
-                                nums_str = [str(n) for n in cartones_asignados]
                                 for n in cartones_asignados:
                                     ocupados_en_memoria.add(n) # Actualiza la memoria interna al instante para el siguiente
 
-                                estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
-                                c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
-                                          (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(nums_str), len(nums_str), estado_reg, ref_wpp))
+                                # Verificar si el cliente ya existe en la base de datos actual para unificar en un solo registro
+                                c.execute("SELECT id, numeros, referencia FROM ventas WHERE LOWER(cliente) = LOWER(?)", (nombre_cliente,))
+                                cliente_db_existente = c.fetchone()
+
+                                if cliente_db_existente:
+                                    id_db, nums_db_str, ref_db = cliente_db_existente
+                                    nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", nums_db_str)]
+                                    
+                                    # Combinar los cartones viejos con los nuevos sin duplicar
+                                    cartones_combinados = sorted(list(set(nums_db_lista + cartones_asignados)))
+                                    nums_combinados_str = ", ".join(map(str, cartones_combinados))
+                                    
+                                    # Mantener o actualizar referencia y estado
+                                    ref_final = ref_db if ref_db else ref_wpp
+                                    estado_reg = "Cancelado" if ref_final else "Pendiente por Cancelar"
+                                    
+                                    c.execute("UPDATE ventas SET numeros=?, cantidad=?, estado=?, referencia=? WHERE id=?",
+                                              (nums_combinados_str, len(cartones_combinados), estado_reg, ref_final, id_db))
+                                else:
+                                    estado_reg = "Cancelado" if ref_wpp else "Pendiente por Cancelar"
+                                    c.execute("INSERT INTO ventas (fecha, cliente, numeros, cantidad, estado, referencia) VALUES (?, ?, ?, ?, ?, ?)",
+                                              (datetime.now().strftime("%Y-%m-%d %H:%M"), nombre_cliente, ", ".join(map(str, cartones_asignados)), len(cartones_asignados), estado_reg, ref_wpp))
+                                
                                 registros_exitosos += 1
 
                             # Registrar detalle para el reporte de la sesión
@@ -409,8 +449,6 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
                         if registros_exitosos > 0:
                             st.success(f"¡Proceso en cascada completado! Se procesaron {len(reporte_procesamiento)} líneas de chat.")
-                            
-                            # Limpiar también el cuadro de texto incrementando la versión y guardar reporte
                             st.session_state["wpp_version"] += 1
                             st.session_state["reporte_wpp_activo"] = reporte_procesamiento
                             st.rerun()
