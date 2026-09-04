@@ -585,7 +585,7 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                             with cols_b1:
                                 st.caption(f"⚠️ Libres a sumar: `{notif_asociada['nuevos_asignados']}`")
                             with cols_b2:
-                                if st.button("➕ Sumar", key=f"sumar_dup_{id_r}_{random.randint(100,999)}", use_container_width=True):
+                                if st.button("➕", key=f"sumar_dup_{id_r}_{random.randint(100,999)}", use_container_width=True, help="Sumar números libres"):
                                     conn = sqlite3.connect(DB_NAME)
                                     c = conn.cursor()
                                     nums_db_lista = [int(n) for n in re.findall(r"\b\d+\b", numeros)]
@@ -641,10 +641,21 @@ elif menu_seleccionado == "📋 Ventas y Registro":
 
             with c_acciones:
                 st.write("")
-                if st.button("🗑️", key=f"del_{id_r}", help="Eliminar registro"):
-                    conn = sqlite3.connect(DB_NAME)
-                    c = conn.cursor()
-                    c.execute("DELETE FROM ventas WHERE id=?", (id_r,))
-                    conn.commit()
-                    conn.close()
-                    st.rerun()
+                col_acc1, col_acc2 = st.columns(2)
+                with col_acc1:
+                    if st.button("✔️", key=f"procesar_{id_r}", help="Marcar como procesado y ocultar"):
+                        # Elimina las notificaciones de WhatsApp asociadas a este cliente para que desaparezca de la vista de pendientes
+                        if "pendientes_pendientes_wpp" in st.session_state:
+                            st.session_state["pendientes_pendientes_wpp"] = [
+                                n for n in st.session_state["pendientes_pendientes_wpp"] 
+                                if n.get("cliente", "").strip().lower() != cliente.strip().lower()
+                            ]
+                        st.rerun()
+                with col_acc2:
+                    if st.button("🗑️", key=f"del_{id_r}", help="Eliminar registro"):
+                        conn = sqlite3.connect(DB_NAME)
+                        c = conn.cursor()
+                        c.execute("DELETE FROM ventas WHERE id=?", (id_r,))
+                        conn.commit()
+                        conn.close()
+                        st.rerun()
