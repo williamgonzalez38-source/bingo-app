@@ -313,31 +313,24 @@ elif menu_seleccionado == "📋 Ventas y Registro":
                         for l in lineas_crudas:
                             l_limpia = l.strip()
                             if l_limpia:
-                                # Ignorar líneas que sean solo horas o marcas de tiempo puras
                                 if not re.fullmatch(r'[\d:\s]+(?:p\.?\s*m\.?|a\.?\s*m\.?)?', l_limpia, re.IGNORECASE):
                                     lineas.append(l_limpia)
 
-                        # --- DETRACCIÓN ULTRA PRECISA DEL NOMBRE DEL CONTACTO ---
+                        # Extracción precisa del nombre de contacto y cuerpo del mensaje
                         nombre_cliente = "Cliente WhatsApp"
                         cuerpo_busqueda = texto_wpp_unificado
 
                         if len(lineas) >= 1:
                             candidato_linea1 = lineas[0]
-                            
-                            # Limpiar corchetes de hora estilo [10:15 a. m.] o [12/08/2026, 15:30]
                             candidato_limpio = re.sub(r'\[.*?\]', '', candidato_linea1).strip()
-                            # Limpiar horas sueltas al inicio o final de la línea
                             candidato_limpio = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', candidato_limpio, flags=re.IGNORECASE).strip()
-                            # Limpiar prefijos telefónicos largos o códigos internacionales si aparecen solos
                             candidato_limpio = re.sub(r'^\+?[\d\s\-\(\)]{7,}', '', candidato_limpio).strip()
                             
-                            # Si la primera línea tras limpiar tiene texto válido y no es pura fecha/número telefónico
                             if candidato_limpio and not candidato_limpio.isdigit() and len(candidato_limpio) > 1:
                                 nombre_cliente = candidato_limpio
                                 if len(lineas) > 1:
                                     cuerpo_busqueda = " ".join(lineas[1:])
                             elif len(lineas) > 1:
-                                # Intentar con la segunda línea si la primera era solo un número o timestamp
                                 candidato_linea2 = lineas[1]
                                 candidato_limpio2 = re.sub(r'\[.*?\]', '', candidato_linea2).strip()
                                 candidato_limpio2 = re.sub(r'\b\d{1,2}:\d{2}\s*(?:p\.?\s*m\.?|a\.?\s*m\.?)?\b', '', candidato_limpio2, flags=re.IGNORECASE).strip()
